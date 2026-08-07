@@ -14,6 +14,7 @@ import {
   evaluateChips,
 } from '@fpl/engine';
 import type { Squad, GwContext, ChipAvailability } from '@fpl/engine';
+import { inferChipAvailability } from '../chipAvailability.js';
 
 const router = Router();
 
@@ -23,16 +24,6 @@ interface RecommendOverrides {
   freeTransfers?: number;
   sellingPrices?: Record<number, number>;
   chipAvailability?: Partial<ChipAvailability>;
-}
-
-function inferChipAvailability(chipNames: string[]): ChipAvailability {
-  const used = new Set(chipNames);
-  return {
-    wildcard: !used.has('wildcard'),
-    freeHit: !used.has('freehit'),
-    benchBoost: !used.has('bboost'),
-    tripleCaptain: !used.has('3xc'),
-  };
 }
 
 async function recommend(req: Request, res: Response, overrides: RecommendOverrides) {
@@ -92,7 +83,7 @@ async function recommend(req: Request, res: Response, overrides: RecommendOverri
     const bank = overrides.bank ?? (latestHistory ? latestHistory.bank / 10 : 0);
     const freeTransfers = Math.max(0, Math.min(5, overrides.freeTransfers ?? 1));
     const chipAvailability = overrides.chipAvailability ??
-      inferChipAvailability(history.chips.map((chip) => chip.name));
+      inferChipAvailability(history.chips, gw);
 
     const allProjected = projectPlayers(allPlayersRaw);
     const squadProjected = projectPlayers(squadRaw);

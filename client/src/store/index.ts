@@ -3,11 +3,15 @@ import { persist } from 'zustand/middleware';
 import type { ChipAvailability, TeamResponse } from '@/api/index.ts';
 
 const ALL_CHIPS: ChipAvailability = {
-  wildcard: true,
-  freeHit: true,
-  benchBoost: true,
-  tripleCaptain: true,
+  wildcard: 2,
+  freeHit: 2,
+  benchBoost: 2,
+  tripleCaptain: 2,
 };
+
+function clampChipUses(uses: number): number {
+  return Math.max(0, Math.min(2, Math.trunc(uses)));
+}
 
 interface AppState {
   teamId: number | null;
@@ -17,7 +21,7 @@ interface AppState {
   bank: number | null;
   setBank: (bank: number) => void;
   chipAvailability: ChipAvailability;
-  setChipAvailable: (chip: keyof ChipAvailability, available: boolean) => void;
+  setChipUsesRemaining: (chip: keyof ChipAvailability, uses: number) => void;
   draftTeamId: number | null;
   draftSquadIds: number[];
   setDraftSquadIds: (ids: number[]) => void;
@@ -37,8 +41,8 @@ export const useAppStore = create<AppState>()(
       bank: null,
       setBank: (bank) => set({ bank }),
       chipAvailability: ALL_CHIPS,
-      setChipAvailable: (chip, available) => set((state) => ({
-        chipAvailability: { ...state.chipAvailability, [chip]: available },
+      setChipUsesRemaining: (chip, uses) => set((state) => ({
+        chipAvailability: { ...state.chipAvailability, [chip]: clampChipUses(uses) },
       })),
       draftTeamId: null,
       draftSquadIds: [],
@@ -75,6 +79,21 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'fpl-app-store',
+      version: 1,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Partial<AppState>;
+        if (version >= 1 || !state.chipAvailability) return state as AppState;
+
+        return {
+          ...state,
+          chipAvailability: Object.fromEntries(
+            Object.entries(state.chipAvailability).map(([chip, available]) => [
+              chip,
+              typeof available === 'boolean' ? (available ? 2 : 0) : clampChipUses(available),
+            ])
+          ) as ChipAvailability,
+        } as AppState;
+      },
       // teamId is public info — safe to store in localStorage
     }
   )

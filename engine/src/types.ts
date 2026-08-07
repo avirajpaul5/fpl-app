@@ -74,7 +74,8 @@ export interface ChipStatus {
 }
 
 export type ChipKey = keyof ChipStatus;
-export type ChipAvailability = Record<ChipKey, boolean>;
+/** Number of valid uses remaining this season for each chip (0..2). */
+export type ChipAvailability = Record<ChipKey, number>;
 
 export interface CaptainPick {
   captain: Player;

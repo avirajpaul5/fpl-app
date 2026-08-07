@@ -145,7 +145,7 @@ describe('Squad legality', () => {
     expect(xi.bench.slice(0, 3).every((player) => player.pos !== 'GK')).toBe(true);
   });
 
-  it('suppresses advice for a chip that is no longer available', () => {
+  it('suppresses advice for a chip with no uses remaining', () => {
     const squad = { players: makeSamplePlayers(15) };
     const advice = evaluateChips(squad, 1, {
       gw: 1,
@@ -153,10 +153,23 @@ describe('Squad legality', () => {
       dgwCountsByGw: {},
       totalGws: 38,
       allPlayers: projectPlayers(squad.players),
-    }, { benchBoost: false });
+    }, { benchBoost: 0 });
 
     expect(advice.benchBoost.recommend).toBe(false);
-    expect(advice.benchBoost.reason).toContain('Already used');
+    expect(advice.benchBoost.reason).toContain('No uses remaining');
+  });
+
+  it('keeps advice active when one chip use remains', () => {
+    const squad = { players: makeSamplePlayers(15) };
+    const advice = evaluateChips(squad, 1, {
+      gw: 1,
+      blankCountsByGw: {},
+      dgwCountsByGw: {},
+      totalGws: 38,
+      allPlayers: projectPlayers(squad.players),
+    }, { benchBoost: 1 });
+
+    expect(advice.benchBoost.recommend).toBe(true);
   });
 
   it('bestXI GK count is exactly 1', () => {

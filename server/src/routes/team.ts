@@ -7,6 +7,7 @@ import {
   fetchEntryHistory,
 } from '../fplClient.js';
 import { projectPlayers } from '@fpl/engine';
+import { inferChipAvailability } from '../chipAvailability.js';
 
 const router = Router();
 
@@ -43,8 +44,6 @@ router.get('/:teamId', async (req: Request, res: Response) => {
         return [pick.element, (pick.selling_price ?? pick.purchase_price ?? fallback * 10) / 10];
       })
     );
-    const usedChipNames = new Set(history.chips.map((chip) => chip.name));
-
     const captain = picks.find((p) => p.is_captain);
     const viceCaptain = picks.find((p) => p.is_vice_captain);
 
@@ -63,12 +62,7 @@ router.get('/:teamId', async (req: Request, res: Response) => {
       sellingPrices,
       freeTransfers: 1,
       freeTransfersSource: 'manual',
-      chipAvailability: {
-        wildcard: !usedChipNames.has('wildcard'),
-        freeHit: !usedChipNames.has('freehit'),
-        benchBoost: !usedChipNames.has('bboost'),
-        tripleCaptain: !usedChipNames.has('3xc'),
-      },
+      chipAvailability: inferChipAvailability(history.chips, gw),
       chipsUsed: history.chips,
       activeChip: userTeam.activeChip,
     });

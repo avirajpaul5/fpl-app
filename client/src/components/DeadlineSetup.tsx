@@ -5,7 +5,6 @@ import { useAppStore } from '@/store/index.ts';
 import { Button } from '@/components/ui/button.tsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.tsx';
 import { Input } from '@/components/ui/input.tsx';
-import { Checkbox } from '@/components/ui/checkbox.tsx';
 import { Label } from '@/components/ui/label.tsx';
 import {
   Collapsible,
@@ -41,7 +40,7 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
     freeTransfers,
     setFreeTransfers,
     chipAvailability,
-    setChipAvailable,
+    setChipUsesRemaining,
     draftSquadIds,
     sellingPrices,
     hydrateDeadlineDraft,
@@ -143,16 +142,27 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
             />
           </div>
           <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-            <Label className="text-xs text-muted-foreground">Available chips</Label>
+            <Label className="text-xs text-muted-foreground">Chip uses remaining</Label>
             <Card size="sm" className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
               {(Object.keys(CHIP_LABELS) as ChipKey[]).map((chip) => (
-                <Label key={chip} className="text-xs font-normal">
-                  <Checkbox
-                    checked={chipAvailability[chip]}
-                    onCheckedChange={(checked) => setChipAvailable(chip, checked)}
-                  />
-                  {CHIP_LABELS[chip]}
-                </Label>
+                <div key={chip} className="flex items-center justify-between gap-2">
+                  <Label htmlFor={`chip-${chip}`} className="text-xs font-normal">
+                    {CHIP_LABELS[chip]}
+                  </Label>
+                  <Select
+                    value={String(chipAvailability[chip])}
+                    onValueChange={(value) => setChipUsesRemaining(chip, Number(value))}
+                  >
+                    <SelectTrigger id={`chip-${chip}`} className="h-7 w-16" aria-label={`${CHIP_LABELS[chip]} uses remaining`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               ))}
             </Card>
           </div>

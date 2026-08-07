@@ -238,11 +238,11 @@ export function evaluateChips(
   };
 
   for (const key of Object.keys(advice) as ChipKey[]) {
-    if (availability?.[key] === false) {
+    if (availability?.[key] != null && availability[key] <= 0) {
       advice[key] = {
         recommend: false,
         gw: null,
-        reason: 'Already used — unavailable for the current chip window.',
+        reason: 'No uses remaining this season.',
         projectedValue: 0,
         confidence: 'high',
       };
