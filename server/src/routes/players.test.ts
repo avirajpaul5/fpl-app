@@ -6,6 +6,9 @@ import { getPlayers } from './players.js';
 interface PlayersResponse {
   gw: number;
   players: Array<{
+    expectedGoals: number;
+    expectedAssists: number;
+    minutes: number;
     upcoming: Array<{
       gw: number;
       oppTeam: number;
@@ -29,6 +32,9 @@ const bootstrap = {
       ep_this: '0.0',
       form: '5.1',
       points_per_game: '4.8',
+      expected_goals: '3.25',
+      expected_assists: '2.10',
+      minutes: 810,
       selected_by_percent: '12.3',
       status: 'a',
       chance_of_playing_next_round: null,
@@ -116,5 +122,13 @@ describe('GET /api/players', () => {
     expect(player.projByGw).toHaveLength(5);
     expect(player.projByGw.every((projection) => projection > 0)).toBe(true);
     expect(player.projHorizon).toBeGreaterThan(0);
+  });
+
+  it('normalizes public expected-goals and expected-assists data', async () => {
+    const player = (await callPlayersRoute()).players[0]!;
+
+    expect(player.expectedGoals).toBe(3.25);
+    expect(player.expectedAssists).toBe(2.1);
+    expect(player.minutes).toBe(810);
   });
 });

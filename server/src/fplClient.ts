@@ -31,6 +31,9 @@ interface RawElement {
   ep_this: string | null;
   form: string;
   points_per_game: string;
+  expected_goals: string;
+  expected_assists: string;
+  minutes: number;
   selected_by_percent: string;
   status: string;
   chance_of_playing_next_round: number | null;
@@ -234,6 +237,9 @@ export async function fetchNormalizedPlayers(currentGw: number): Promise<Player[
       epNext: parseFloat(el.ep_next ?? '0') || 0,
       ppg: parseFloat(el.points_per_game) || 0,
       form: parseFloat(el.form) || 0,
+      expectedGoals: parseFloat(el.expected_goals) || 0,
+      expectedAssists: parseFloat(el.expected_assists) || 0,
+      minutes: el.minutes || 0,
       ownership: parseFloat(el.selected_by_percent) || 0,
       status: el.status,
       chanceNext: el.chance_of_playing_next_round,

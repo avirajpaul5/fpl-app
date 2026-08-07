@@ -41,6 +41,9 @@ export interface Player {
   epNext: number;
   ppg: number;
   form: number;
+  expectedGoals: number;
+  expectedAssists: number;
+  minutes: number;
   ownership: number;
   status: string;
   chanceNext: number | null;

@@ -9,6 +9,7 @@
  *
  * This test suite is structured to use small sample fixtures for CI speed.
  * For full backtest, set FULL_BACKTEST=1 and ensure the CSV files are present.
+ * BACKTEST_FIXTURES_DIR may point at an external directory with season folders.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,10 +25,19 @@ import {
   evaluateChips,
 } from '../src/index.js';
 import type { Player, ProjectedPlayer, Squad } from '../src/index.js';
-import { projectPlayer, projectPlayers } from '../src/projection.js';
+import {
+  MULTI_GW_BASELINE_BLEND,
+  MULTI_GW_BLEND,
+  expectedAttackingPointsRate,
+  multiGwBasePoints,
+  projectPlayer,
+  projectPlayers,
+} from '../src/projection.js';
+import type { MultiGwBlend, MultiGwSignals } from '../src/projection.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURES_DIR = join(__dirname, 'fixtures');
+const FIXTURES_DIR = process.env['BACKTEST_FIXTURES_DIR'] ?? join(__dirname, 'fixtures');
+const RUN_FULL_BACKTEST = process.env['FULL_BACKTEST'] === '1';
 
 // ---- CSV parser ----
 function parseCSV(content: string): Record<string, string>[] {
@@ -65,20 +75,31 @@ function spearman(xs: number[], ys: number[]): number {
   function rank(arr: number[]): number[] {
     const indexed = arr.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
     const ranks = new Array(n).fill(0);
-    for (let i = 0; i < n; i++) {
-      ranks[indexed[i]!.i] = i + 1;
+    for (let start = 0; start < n;) {
+      let end = start + 1;
+      while (end < n && indexed[end]!.v === indexed[start]!.v) end++;
+      const averageRank = (start + end - 1) / 2 + 1;
+      for (let i = start; i < end; i++) ranks[indexed[i]!.i] = averageRank;
+      start = end;
     }
     return ranks;
   }
 
   const rx = rank(xs);
   const ry = rank(ys);
-  let dSqSum = 0;
+  const meanX = rx.reduce((sum, value) => sum + value, 0) / n;
+  const meanY = ry.reduce((sum, value) => sum + value, 0) / n;
+  let covariance = 0;
+  let varianceX = 0;
+  let varianceY = 0;
   for (let i = 0; i < n; i++) {
-    const d = rx[i]! - ry[i]!;
-    dSqSum += d * d;
+    const dx = rx[i]! - meanX;
+    const dy = ry[i]! - meanY;
+    covariance += dx * dy;
+    varianceX += dx * dx;
+    varianceY += dy * dy;
   }
-  return 1 - (6 * dSqSum) / (n * (n * n - 1));
+  return covariance / Math.sqrt(varianceX * varianceY);
 }
 
 // ---- Squad legality tests (use sample data) ----
@@ -95,6 +116,9 @@ describe('Squad legality', () => {
       epNext: Math.random() * 8,
       ppg: 4 + Math.random() * 3,
       form: 3 + Math.random() * 4,
+      expectedGoals: 2 + Math.random() * 4,
+      expectedAssists: 1 + Math.random() * 3,
+      minutes: 900,
       ownership: 10 + Math.random() * 30,
       status: 'a',
       chanceNext: 100,
@@ -216,6 +240,9 @@ describe('draftSquad', () => {
         epNext: 3 + Math.random() * 6,
         ppg: 3 + Math.random() * 5,
         form: 2 + Math.random() * 5,
+        expectedGoals: 2 + Math.random() * 5,
+        expectedAssists: 1 + Math.random() * 4,
+        minutes: 900,
         ownership: 5 + Math.random() * 50,
         status: 'a',
         chanceNext: 100,
@@ -298,6 +325,9 @@ describe('planTransfers', () => {
       epNext: horizon / 5,
       ppg: horizon / 5,
       form: horizon / 5,
+      expectedGoals: 0,
+      expectedAssists: 0,
+      minutes: 0,
       ownership: 10,
       status: 'a',
       chanceNext: 100,
@@ -334,6 +364,9 @@ describe('planTransfers', () => {
       epNext: projHorizon / 5,
       ppg: projHorizon / 5,
       form: projHorizon / 5,
+      expectedGoals: 0,
+      expectedAssists: 0,
+      minutes: 0,
       ownership: 10,
       status: 'a',
       chanceNext: 100,
@@ -375,6 +408,9 @@ describe('planTransfers', () => {
       epNext: projHorizon / 5,
       ppg: projHorizon / 5,
       form: projHorizon / 5,
+      expectedGoals: 0,
+      expectedAssists: 0,
+      minutes: 0,
       ownership: 5,
       status: 'a',
       chanceNext: 100,
@@ -415,6 +451,7 @@ describe('projection k=0', () => {
     const player: Player = {
       id: 1, name: 'Test', pos: 'MID', team: 1, teamName: 'Arsenal',
       price: 8.0, epNext: 7.5, ppg: 6.0, form: 6.5, ownership: 20,
+      expectedGoals: 5, expectedAssists: 4, minutes: 900,
       status: 'a', chanceNext: 100, totalPoints: 120,
       upcoming: [{ gw: 1, oppTeam: 2, isHome: true, fdr: 3, isDGW: false }],
     };
@@ -426,6 +463,7 @@ describe('projection k=0', () => {
     const player: Player = {
       id: 2, name: 'Injured', pos: 'FWD', team: 2, teamName: 'Chelsea',
       price: 9.0, epNext: 8.0, ppg: 7.0, form: 7.0, ownership: 30,
+      expectedGoals: 8, expectedAssists: 2, minutes: 900,
       status: 'i', chanceNext: null, totalPoints: 100,
       upcoming: [{ gw: 1, oppTeam: 3, isHome: false, fdr: 4, isDGW: false }],
     };
@@ -437,6 +475,7 @@ describe('projection k=0', () => {
     const player: Player = {
       id: 3, name: 'Doubtful50', pos: 'DEF', team: 3, teamName: 'Spurs',
       price: 6.0, epNext: 4.0, ppg: 4.0, form: 4.0, ownership: 15,
+      expectedGoals: 1, expectedAssists: 2, minutes: 900,
       status: 'd', chanceNext: 50, totalPoints: 80,
       upcoming: [{ gw: 1, oppTeam: 4, isHome: true, fdr: 2, isDGW: false }],
     };
@@ -445,6 +484,172 @@ describe('projection k=0', () => {
   });
 });
 
+describe('multi-GW expected-stat blend', () => {
+  const signals: MultiGwSignals = {
+    pos: 'MID',
+    ppg: 5,
+    form: 4,
+    expectedGoals: 2,
+    expectedAssists: 1,
+    minutes: 900,
+  };
+
+  it('values xG and xA using position-specific FPL points', () => {
+    expect(expectedAttackingPointsRate(signals)).toBeCloseTo(1.3, 5);
+  });
+
+  it('uses the backtest-winning 60/20/20 blend', () => {
+    expect(multiGwBasePoints(signals)).toBeCloseTo(4.06, 5);
+  });
+
+  it('shrinks expected-stat rates until 450 minutes', () => {
+    expect(expectedAttackingPointsRate({
+      ...signals,
+      expectedGoals: 1,
+      expectedAssists: 0,
+      minutes: 90,
+    })).toBeCloseTo(1, 5);
+  });
+
+  it('falls back to form before expected-stat history exists', () => {
+    expect(expectedAttackingPointsRate({ ...signals, minutes: 0 })).toBe(signals.form);
+  });
+});
+
+interface HistoricalGwStats {
+  points: number;
+  minutes: number;
+  expectedGoals: number;
+  expectedAssists: number;
+  fixtures: Array<{ id: number; isHome: boolean }>;
+}
+
+interface HistoricalPlayer {
+  pos: Player['pos'];
+  byGw: Map<number, HistoricalGwStats>;
+}
+
+interface MultiGwBacktestSample extends MultiGwSignals {
+  actualNextFour: number;
+  projectionFactor: number;
+}
+
+function historicalPos(label: string): Player['pos'] {
+  const normalized = label.toUpperCase();
+  if (normalized === 'GK' || normalized === 'GKP') return 'GK';
+  if (normalized === 'DEF') return 'DEF';
+  if (normalized === 'MID') return 'MID';
+  return 'FWD';
+}
+
+function buildMultiGwSamples(
+  rows: Record<string, string>[],
+  fixtureRows: Record<string, string>[]
+): MultiGwBacktestSample[] {
+  const fixtureDifficulties = new Map(
+    fixtureRows.map((row) => [
+      Number(row['id']),
+      {
+        home: Number(row['team_h_difficulty']),
+        away: Number(row['team_a_difficulty']),
+      },
+    ])
+  );
+  const players = new Map<number, HistoricalPlayer>();
+  let maxGw = 0;
+
+  for (const row of rows) {
+    const id = Number(row['element']);
+    const gw = Number(row['GW'] ?? row['round']);
+    if (!Number.isFinite(id) || !Number.isFinite(gw)) continue;
+    maxGw = Math.max(maxGw, gw);
+
+    let player = players.get(id);
+    if (!player) {
+      player = { pos: historicalPos(row['position'] ?? ''), byGw: new Map() };
+      players.set(id, player);
+    }
+
+    const stats = player.byGw.get(gw) ?? {
+      points: 0,
+      minutes: 0,
+      expectedGoals: 0,
+      expectedAssists: 0,
+      fixtures: [],
+    };
+    stats.points += Number(row['total_points']) || 0;
+    stats.minutes += Number(row['minutes']) || 0;
+    stats.expectedGoals += Number(row['expected_goals']) || 0;
+    stats.expectedAssists += Number(row['expected_assists']) || 0;
+    stats.fixtures.push({
+      id: Number(row['fixture']),
+      isHome: row['was_home']?.toLowerCase() === 'true',
+    });
+    player.byGw.set(gw, stats);
+  }
+
+  const samples: MultiGwBacktestSample[] = [];
+  for (const player of players.values()) {
+    let totalPoints = 0;
+    let totalMinutes = 0;
+    let totalExpectedGoals = 0;
+    let totalExpectedAssists = 0;
+    let appearances = 0;
+    const recent: HistoricalGwStats[] = [];
+
+    for (let gw = 1; gw <= maxGw - 4; gw++) {
+      const stats = player.byGw.get(gw) ?? {
+        points: 0,
+        minutes: 0,
+        expectedGoals: 0,
+        expectedAssists: 0,
+        fixtures: [],
+      };
+      if (stats.minutes > 0) appearances++;
+      totalPoints += stats.points;
+      totalMinutes += stats.minutes;
+      totalExpectedGoals += stats.expectedGoals;
+      totalExpectedAssists += stats.expectedAssists;
+      recent.push(stats);
+      if (recent.length > 4) recent.shift();
+
+      // Avoid judging season-rate signals on players without a useful sample.
+      if (gw < 5 || appearances < 3 || totalMinutes < 180) continue;
+
+      const recentAppearances = recent.filter((item) => item.minutes > 0).length;
+      const recentPoints = recent.reduce((sum, item) => sum + item.points, 0);
+      const actualNextFour = [1, 2, 3, 4].reduce(
+        (sum, offset) => sum + (player.byGw.get(gw + offset)?.points ?? 0),
+        0
+      ) / 4;
+      const projectionFactor = [1, 2, 3, 4].reduce((sum, offset) => {
+        const futureFixtures = player.byGw.get(gw + offset)?.fixtures ?? [];
+        return sum + futureFixtures.reduce((fixtureSum, fixture) => {
+          const difficulty = fixtureDifficulties.get(fixture.id);
+          if (!difficulty) return fixtureSum;
+          const fdr = fixture.isHome ? difficulty.home : difficulty.away;
+          const fdrMultiplier = 1.25 - (fdr - 1) * 0.11;
+          const homeMultiplier = fixture.isHome ? 1.05 : 0.97;
+          return fixtureSum + fdrMultiplier * homeMultiplier;
+        }, 0);
+      }, 0) / 4;
+
+      samples.push({
+        pos: player.pos,
+        ppg: totalPoints / appearances,
+        form: recentAppearances > 0 ? recentPoints / recentAppearances : totalPoints / appearances,
+        expectedGoals: totalExpectedGoals,
+        expectedAssists: totalExpectedAssists,
+        minutes: totalMinutes,
+        actualNextFour,
+        projectionFactor,
+      });
+    }
+  }
+
+  return samples;
+}
+
 // ---- Historical backtest (runs only when FULL_BACKTEST=1 and CSVs present) ----
 describe('Historical backtest (skipped without data)', () => {
   const SEASONS = ['2022-23', '2023-24', '2024-25'];
@@ -452,8 +657,8 @@ describe('Historical backtest (skipped without data)', () => {
   for (const season of SEASONS) {
     it(`[${season}] k=0 Spearman(projection, actual) ≥ 0.50`, () => {
       const csvPath = join(FIXTURES_DIR, `${season}/merged_gw.csv`);
-      if (!existsSync(csvPath)) {
-        console.log(`[SKIP] ${csvPath} not found. Run download script to enable full backtest.`);
+      if (!RUN_FULL_BACKTEST || !existsSync(csvPath)) {
+        console.log(`[SKIP] Set FULL_BACKTEST=1 and provide ${csvPath}.`);
         return;
       }
 
@@ -471,6 +676,79 @@ describe('Historical backtest (skipped without data)', () => {
       expect(rho).toBeGreaterThanOrEqual(0.50);
     });
   }
+
+  it('adopted xG/xA blend beats the multi-GW baseline and candidate sweep', () => {
+    if (!RUN_FULL_BACKTEST) {
+      console.log('[SKIP] Set FULL_BACKTEST=1 to compare multi-GW blends.');
+      return;
+    }
+
+    const samplesBySeason = new Map<string, MultiGwBacktestSample[]>();
+    for (const season of SEASONS) {
+      const csvPath = join(FIXTURES_DIR, `${season}/merged_gw.csv`);
+      const fixturesPath = join(FIXTURES_DIR, `${season}/fixtures.csv`);
+      if (existsSync(csvPath) && existsSync(fixturesPath)) {
+        samplesBySeason.set(
+          season,
+          buildMultiGwSamples(
+            parseCSV(readFileSync(csvPath, 'utf-8')),
+            parseCSV(readFileSync(fixturesPath, 'utf-8'))
+          )
+        );
+      }
+    }
+
+    if (samplesBySeason.size === 0) {
+      console.log(`[SKIP] No historical CSVs found under ${FIXTURES_DIR}.`);
+      return;
+    }
+
+    const candidates: Record<string, Readonly<MultiGwBlend>> = {
+      baseline: MULTI_GW_BASELINE_BLEND,
+      '10% xG+xA': { ppg: 0.6, form: 0.3, expectedAttack: 0.1 },
+      '20% xG+xA (adopted)': MULTI_GW_BLEND,
+      '30% xG+xA': { ppg: 0.6, form: 0.1, expectedAttack: 0.3 },
+      '40% xG+xA': { ppg: 0.6, form: 0, expectedAttack: 0.4 },
+      '25% rebalance': { ppg: 0.5, form: 0.25, expectedAttack: 0.25 },
+    };
+
+    for (const [season, samples] of samplesBySeason) {
+      const actual = samples.map((sample) => sample.actualNextFour);
+      const baselineRho = spearman(
+        samples.map(
+          (sample) => multiGwBasePoints(sample, MULTI_GW_BASELINE_BLEND) * sample.projectionFactor
+        ),
+        actual
+      );
+      const adoptedRho = spearman(
+        samples.map(
+          (sample) => multiGwBasePoints(sample, MULTI_GW_BLEND) * sample.projectionFactor
+        ),
+        actual
+      );
+      console.log(
+        `[${season}] GW+1..GW+4 Spearman baseline=${baselineRho.toFixed(4)} adopted=${adoptedRho.toFixed(4)}`
+      );
+      expect(adoptedRho).toBeGreaterThan(baselineRho);
+    }
+
+    const allSamples = [...samplesBySeason.values()].flat();
+    const actual = allSamples.map((sample) => sample.actualNextFour);
+    const scores = Object.entries(candidates).map(([name, blend]) => ({
+      name,
+      rho: spearman(
+        allSamples.map(
+          (sample) => multiGwBasePoints(sample, blend) * sample.projectionFactor
+        ),
+        actual
+      ),
+    })).sort((a, b) => b.rho - a.rho);
+
+    console.log(
+      `[pooled] ${scores.map(({ name, rho }) => `${name}=${rho.toFixed(4)}`).join(', ')}`
+    );
+    expect(scores[0]?.name).toBe('20% xG+xA (adopted)');
+  });
 });
 
 // ---- ENGINE_CONFIG sanity ----

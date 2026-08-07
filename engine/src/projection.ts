@@ -1,6 +1,64 @@
 import { Player, ProjectedPlayer } from './types.js';
 import { ENGINE_CONFIG } from './config.js';
 
+export interface MultiGwBlend {
+  ppg: number;
+  form: number;
+  expectedAttack: number;
+}
+
+export type MultiGwSignals = Pick<
+  Player,
+  'pos' | 'ppg' | 'form' | 'expectedGoals' | 'expectedAssists' | 'minutes'
+>;
+
+export const MULTI_GW_BASELINE_BLEND: Readonly<MultiGwBlend> = {
+  ppg: 0.6,
+  form: 0.4,
+  expectedAttack: 0,
+};
+
+// This blend beat the baseline in the 2022-23, 2023-24, and 2024-25
+// historical GW+1..GW+4 backtests. Keep the baseline exported so future
+// candidates can be compared on exactly the same harness.
+export const MULTI_GW_BLEND: Readonly<MultiGwBlend> = {
+  ppg: 0.6,
+  form: 0.2,
+  expectedAttack: 0.2,
+};
+
+const MIN_EXPECTED_RATE_MINUTES = 450;
+
+function goalPoints(pos: Player['pos']): number {
+  if (pos === 'MID') return 5;
+  if (pos === 'FWD') return 4;
+  return 6;
+}
+
+export function expectedAttackingPointsRate(player: MultiGwSignals): number {
+  // Preserve the old PPG/form projection when expected-stat history is not yet
+  // available (for example before the season starts).
+  if (player.minutes <= 0) return player.form;
+
+  const expectedPoints =
+    player.expectedGoals * goalPoints(player.pos) + player.expectedAssists * 3;
+
+  // Use a five-match denominator until the player has 450 minutes so a tiny
+  // early-season sample cannot dominate the multi-GW projection.
+  return (expectedPoints * 90) / Math.max(player.minutes, MIN_EXPECTED_RATE_MINUTES);
+}
+
+export function multiGwBasePoints(
+  player: MultiGwSignals,
+  blend: Readonly<MultiGwBlend> = MULTI_GW_BLEND
+): number {
+  return (
+    blend.ppg * player.ppg +
+    blend.form * player.form +
+    blend.expectedAttack * expectedAttackingPointsRate(player)
+  );
+}
+
 function availabilityMultiplier(p: Player): number {
   if (p.status === 'a') return 1.0;
   if (p.chanceNext != null) return p.chanceNext / 100;
@@ -15,10 +73,7 @@ function projForGw(player: Player, k: number): number {
     return player.epNext * availabilityMultiplier(player);
   }
 
-  // TODO NEEDS-VALIDATION: multi-GW projection blend (0.6*ppg + 0.4*form) was not
-  // separately backtested. This is v1. Port §9 backtest harness to test alternative
-  // blends against realized multi-GW points once historical data is loaded.
-  const base = 0.6 * player.ppg + 0.4 * player.form;
+  const base = multiGwBasePoints(player);
   const fixture = player.upcoming[k];
 
   if (!fixture) {

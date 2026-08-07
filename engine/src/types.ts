@@ -19,6 +19,9 @@ export interface Player {
   epNext: number; // FPL expected pts next GW (primary signal)
   ppg: number; // season points per game
   form: number; // FPL form
+  expectedGoals: number; // cumulative season xG from the public FPL feed
+  expectedAssists: number; // cumulative season xA from the public FPL feed
+  minutes: number; // cumulative season minutes, used to rate xG/xA
   ownership: number; // %
   status: string; // a/d/i/s/u
   chanceNext: number | null;

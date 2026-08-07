@@ -16,7 +16,15 @@ export type {
   RecommendationBundle,
   GwData,
 } from './types.js';
-export { projectPlayer, projectPlayers } from './projection.js';
+export {
+  MULTI_GW_BASELINE_BLEND,
+  MULTI_GW_BLEND,
+  expectedAttackingPointsRate,
+  multiGwBasePoints,
+  projectPlayer,
+  projectPlayers,
+} from './projection.js';
+export type { MultiGwBlend, MultiGwSignals } from './projection.js';
 export { validateSquad, bestXI, draftSquad, rebuildSquad } from './squad.js';
 export type { ValidationResult } from './squad.js';
 export { pickCaptain } from './captain.js';
