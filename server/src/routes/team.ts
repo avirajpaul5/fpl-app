@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import {
-  fetchNormalizedPlayersV2,
+  fetchNormalizedPlayers,
   getCurrentGw,
   fetchUserTeam,
   fetchEntry,
@@ -21,7 +21,7 @@ router.get('/:teamId', async (req: Request, res: Response) => {
 
     const gw = await getCurrentGw();
     const [players, userTeam, entry, history] = await Promise.all([
-      fetchNormalizedPlayersV2(gw),
+      fetchNormalizedPlayers(gw),
       fetchUserTeam(teamId, gw - 1 > 0 ? gw - 1 : gw),
       fetchEntry(teamId),
       fetchEntryHistory(teamId),

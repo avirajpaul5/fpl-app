@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { fetchNormalizedPlayersV2, getCurrentGw } from '../fplClient.js';
+import { fetchNormalizedPlayers, getCurrentGw } from '../fplClient.js';
 import { projectPlayers, draftSquad, ENGINE_CONFIG } from '@fpl/engine';
 
 const router = Router();
@@ -15,7 +15,7 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const body: OptimizeBody = req.body ?? {};
     const gw = await getCurrentGw();
-    const allPlayersRaw = await fetchNormalizedPlayersV2(gw);
+    const allPlayersRaw = await fetchNormalizedPlayers(gw);
 
     let players = projectPlayers(allPlayersRaw);
 

@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { fetchNormalizedPlayersV2, getCurrentGw } from '../fplClient.js';
+import { fetchNormalizedPlayers, getCurrentGw } from '../fplClient.js';
 import { projectPlayers } from '@fpl/engine';
 import type { Pos } from '@fpl/engine';
 
 const router = Router();
 
-router.get('/', async (req: Request, res: Response) => {
+export async function getPlayers(req: Request, res: Response): Promise<void> {
   try {
     const gw = await getCurrentGw();
-    const players = await fetchNormalizedPlayersV2(gw);
+    const players = await fetchNormalizedPlayers(gw);
     const projected = projectPlayers(players);
 
     // Filtering
@@ -50,13 +50,15 @@ router.get('/', async (req: Request, res: Response) => {
     console.error(err);
     res.status(500).json({ error: String(err) });
   }
-});
+}
+
+router.get('/', getPlayers);
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const playerId = parseInt(req.params['id']!);
     const gw = await getCurrentGw();
-    const players = await fetchNormalizedPlayersV2(gw);
+    const players = await fetchNormalizedPlayers(gw);
     const player = players.find((p) => p.id === playerId);
 
     if (!player) {

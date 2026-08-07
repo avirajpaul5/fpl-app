@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import {
-  fetchNormalizedPlayersV2,
+  fetchNormalizedPlayers,
   getCurrentGw,
   fetchUserTeam,
   fetchFixtures,
@@ -37,7 +37,7 @@ async function recommend(req: Request, res: Response, overrides: RecommendOverri
     const gw = await getCurrentGw();
     const publishedGw = gw - 1 > 0 ? gw - 1 : gw;
     const [allPlayersRaw, userTeam, history] = await Promise.all([
-      fetchNormalizedPlayersV2(gw),
+      fetchNormalizedPlayers(gw),
       fetchUserTeam(teamId, publishedGw),
       fetchEntryHistory(teamId),
     ]);
