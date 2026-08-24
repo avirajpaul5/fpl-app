@@ -15,15 +15,21 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
 import { Badge } from '@/components/ui/badge.tsx';
 import { Checkbox } from '@/components/ui/checkbox.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { PosBadge } from '@/components/PosBadge.tsx';
 import { StatusDot } from '@/components/StatusDot.tsx';
+import { PlayerTableSkeleton } from '@/components/LoadingSkeletons.tsx';
 
 type SortKey = 'epNext' | 'projHorizon' | 'price' | 'ownership' | 'ppg' | 'totalPoints';
 type SortDir = 'asc' | 'desc';
 type PosFilter = 'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD';
 
 interface CompareSlot { player: Player; role: 'out' | 'in'; }
+
+const PAGE_SIZE = 25;
+
+function nextGwXp(player: Player): number {
+  return player.projByGw[0] ?? player.epNext;
+}
 
 const SORT_LABELS: Record<SortKey, string> = {
   epNext:       'xP',
@@ -42,6 +48,7 @@ export function Transfers() {
   const [search, setSearch]       = useState('');
   const [compare, setCompare]     = useState<CompareSlot[]>([]);
   const [diffOnly, setDiffOnly]   = useState(false);
+  const [page, setPage]           = useState(1);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['players', pos, maxPrice, sort],
@@ -60,15 +67,18 @@ export function Transfers() {
       const q = search.toLowerCase();
       r = r.filter((p) => p.name.toLowerCase().includes(q) || p.teamName.toLowerCase().includes(q));
     }
-    if (diffOnly) r = r.filter((p) => p.ownership < 15 && p.epNext > 4);
+    if (diffOnly) r = r.filter((p) => p.ownership < 15 && nextGwXp(p) > 4);
     r = [...r].sort((a, b) => {
-      const diff = (a[sort] as number) - (b[sort] as number);
+      const diff = sort === 'epNext'
+        ? nextGwXp(a) - nextGwXp(b)
+        : (a[sort] as number) - (b[sort] as number);
       return sortDir === 'desc' ? -diff : diff;
     });
     return r;
   }, [data, search, diffOnly, sort, sortDir]);
 
   function handleSort(key: SortKey) {
+    setPage(1);
     if (sort === key) {
       setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
     } else {
@@ -83,10 +93,14 @@ export function Transfers() {
 
   const outP = compare.find((c) => c.role === 'out')?.player;
   const inP  = compare.find((c) => c.role === 'in')?.player;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedPlayers = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   const recencyWarn = inP && outP &&
     inP.projHorizon < outP.projHorizon &&
-    inP.epNext > outP.epNext;
+    nextGwXp(inP) > nextGwXp(outP);
 
   function SortIcon({ col }: { col: SortKey }) {
     if (sort !== col) return <span className="ml-1 text-muted-foreground">↕</span>;
@@ -143,7 +157,7 @@ export function Transfers() {
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { label: 'Next GW xP',   value: player.epNext.toFixed(1),     hi: true },
+                          { label: 'Next GW xP',   value: nextGwXp(player).toFixed(1), hi: true },
                           { label: '5-GW horizon',  value: player.projHorizon.toFixed(1), hi: true },
                           { label: 'PPG',           value: player.ppg.toFixed(1),         hi: false },
                           { label: 'Owned by',      value: `${player.ownership.toFixed(1)}%`, hi: false },
@@ -208,7 +222,7 @@ export function Transfers() {
               variant={pos === p ? 'default' : 'outline'}
               size="sm"
               className="h-8"
-              onClick={() => setPos(p)}
+              onClick={() => { setPos(p); setPage(1); }}
             >
               {p}
             </Button>
@@ -218,21 +232,21 @@ export function Transfers() {
           type="number"
           placeholder="Max £m"
           value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
+          onChange={(e) => { setMaxPrice(e.target.value); setPage(1); }}
           className="h-8 w-28 text-sm"
         />
         <Input
           type="text"
           placeholder="Search…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="h-8 w-48 text-sm"
         />
         <Label className="h-8 rounded-lg border border-border bg-background px-2.5 font-normal">
-          <Checkbox checked={diffOnly} onCheckedChange={setDiffOnly} />
+          <Checkbox checked={diffOnly} onCheckedChange={(checked) => { setDiffOnly(checked); setPage(1); }} />
           Differentials
         </Label>
-        <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setSortDir('desc'); }}>
+        <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setSortDir('desc'); setPage(1); }}>
           <SelectTrigger className="h-8 w-44 text-sm">
             <SelectValue placeholder="Sort by…" />
           </SelectTrigger>
@@ -249,14 +263,14 @@ export function Transfers() {
           variant="ghost"
           size="sm"
           className="h-8 text-xs text-muted-foreground"
-          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+          onClick={() => { setSortDir((d) => (d === 'desc' ? 'asc' : 'desc')); setPage(1); }}
           title="Toggle sort direction"
         >
           {sortDir === 'desc' ? '↓ Desc' : '↑ Asc'}
         </Button>
       </Card>
 
-      {isLoading && <Card><CardContent className="space-y-3 py-6"><Skeleton className="h-8 w-full" /><Skeleton className="h-64 w-full" /></CardContent></Card>}
+      {isLoading && <PlayerTableSkeleton />}
       {isError && <Alert variant="destructive"><AlertTitle>Could not load players</AlertTitle><AlertDescription>{String(error)}</AlertDescription></Alert>}
 
       {/* Player table */}
@@ -278,8 +292,8 @@ export function Transfers() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.slice(0, 100).map((p) => {
-                const isDiff = p.ownership < 15 && p.epNext > 4;
+              {paginatedPlayers.map((p) => {
+                const isDiff = p.ownership < 15 && nextGwXp(p) > 4;
                 return (
                   <TableRow key={p.id}>
                     <TableCell>
@@ -294,7 +308,7 @@ export function Transfers() {
                     <TableCell className="text-muted-foreground text-sm">{p.teamName}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums">£{p.price.toFixed(1)}m</TableCell>
                     <TableCell className="text-right">
-                      <span className="text-primary font-semibold text-sm tabular-nums">{p.epNext.toFixed(1)}</span>
+                      <span className="text-primary font-semibold text-sm tabular-nums">{nextGwXp(p).toFixed(1)}</span>
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{p.projHorizon.toFixed(1)}</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.ppg.toFixed(1)}</TableCell>
@@ -317,11 +331,32 @@ export function Transfers() {
               })}
             </TableBody>
           </Table>
-          {filtered.length > 100 && (
-            <div className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
-              Showing 100 of {filtered.length} — use filters to narrow down.
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+            <div className="text-xs text-muted-foreground">
+              Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length} players
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                Previous
+              </Button>
+              <span className="min-w-20 text-center text-xs text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </Card>
       )}
       {!isLoading && !isError && filtered.length === 0 && (

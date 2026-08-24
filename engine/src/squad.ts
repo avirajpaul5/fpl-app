@@ -1,6 +1,7 @@
 import { Player, ProjectedPlayer, Squad, XI } from './types.js';
 import { ENGINE_CONFIG } from './config.js';
 import { projectPlayer } from './projection.js';
+import { pickCaptain } from './captain.js';
 
 export interface ValidationResult {
   ok: boolean;
@@ -106,13 +107,9 @@ export function bestXI(squad: Squad, gwIndex: number = 0): XI {
     return (b.projByGw[gwIndex] ?? 0) - (a.projByGw[gwIndex] ?? 0);
   });
 
-  // Captain = highest projected xP starter
-  const byXp = [...starters].sort(
-    (a, b) => (b.projByGw[gwIndex] ?? 0) - (a.projByGw[gwIndex] ?? 0)
-  );
-
-  const captain = byXp[0] ?? starters[0]!;
-  const viceCaptain = byXp[1] ?? starters[1] ?? captain;
+  const captainPick = pickCaptain(starters, gwIndex);
+  const captain = captainPick.captain;
+  const viceCaptain = captainPick.viceCaptain;
 
   const starterIds = new Set(starters.map((p) => p.id));
   const bench = projected

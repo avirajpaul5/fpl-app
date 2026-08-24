@@ -2,6 +2,9 @@
   "name": "fpl-app",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "workspaces": ["engine", "server", "client"],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",

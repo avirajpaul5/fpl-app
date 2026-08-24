@@ -42,6 +42,16 @@ Open [http://localhost:5173](http://localhost:5173). The Vite development server
 
 The app uses public Fantasy Premier League endpoints, so no API key or environment configuration is required for local development.
 
+## Deploying to Vercel
+
+The repository includes `vercel.json` for a single Vercel project:
+
+- Vite builds the static client to `client/dist`.
+- `api/index.ts` exposes the Express API as one Node.js Function.
+- `/api/*` routes go to Express and client-side routes fall back to `index.html`.
+
+Import the repository in Vercel with the project root left at the repository root. No environment variables are required. The app is suitable for a personal, non-commercial Hobby deployment; its in-memory FPL cache is best-effort and resets on function cold starts.
+
 ## Scripts
 
 ```bash

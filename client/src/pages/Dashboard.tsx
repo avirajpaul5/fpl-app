@@ -7,13 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge.tsx';
 import { Separator } from '@/components/ui/separator.tsx';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
-import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { PosBadge } from '@/components/PosBadge.tsx';
 import { XpBar } from '@/components/XpBar.tsx';
 import { ConfidencePill } from '@/components/ConfidencePill.tsx';
 import { StatusDot } from '@/components/StatusDot.tsx';
 import { TeamIdInput } from '@/components/TeamIdInput.tsx';
 import { DeadlineSetup } from '@/components/DeadlineSetup.tsx';
+import { DeadlineSetupSkeleton, RecommendationSkeleton } from '@/components/LoadingSkeletons.tsx';
 
 const posRowCls: Record<string, string> = {
   GK:  'border-l-2 border-l-white/30',
@@ -21,6 +21,10 @@ const posRowCls: Record<string, string> = {
   MID: 'border-l-2 border-l-white/30',
   FWD: 'border-l-2 border-l-white/30',
 };
+
+function nextGwXp(player: { epNext: number; projByGw: number[] }): number {
+  return player.projByGw[0] ?? player.epNext;
+}
 
 export function Dashboard() {
   const {
@@ -98,9 +102,13 @@ export function Dashboard() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Badge variant="secondary" className="text-sm font-semibold px-3 py-1">
-            GW{health.data?.currentGw ?? '—'}
-          </Badge>
+          {health.isLoading ? (
+            <div role="status" aria-label="Loading current gameweek" className="h-7 w-14 animate-pulse rounded-md bg-muted" />
+          ) : (
+            <Badge variant="secondary" className="text-sm font-semibold px-3 py-1">
+              GW{health.data?.currentGw ?? '—'}
+            </Badge>
+          )}
           <TeamIdInput />
         </div>
         <div className="flex items-center gap-3">
@@ -126,7 +134,7 @@ export function Dashboard() {
       )}
 
       {(team.isLoading || players.isLoading || (team.data && !draftReady)) && (
-        <Card><CardContent className="space-y-3 py-6"><Skeleton className="h-4 w-52" /><Skeleton className="h-20 w-full" /></CardContent></Card>
+        <DeadlineSetupSkeleton />
       )}
 
       {team.isError && (
@@ -134,7 +142,7 @@ export function Dashboard() {
       )}
 
       {recommend.isLoading && (
-        <Card><CardContent className="space-y-3 py-6"><Skeleton className="h-4 w-40" /><Skeleton className="h-28 w-full" /></CardContent></Card>
+        <RecommendationSkeleton />
       )}
       {recommend.isError && (
         <Alert variant="destructive"><AlertTitle>Could not load recommendations</AlertTitle><AlertDescription>{recommend.error?.message ?? 'Failed to load'}</AlertDescription></Alert>
@@ -148,6 +156,9 @@ export function Dashboard() {
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                 Captain Pick
               </CardTitle>
+              <CardDescription>
+                Next-GW xP comes from the public FPL feed and includes fixture and availability context. Exact ties prefer attacking positions.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -310,7 +321,7 @@ export function Dashboard() {
                       <StatusDot status={p.status} chanceNext={p.chanceNext} />
                       <span className="text-xs text-muted-foreground hidden sm:inline">{p.teamName}</span>
                       <span className="text-xs font-semibold text-primary tabular-nums w-14 text-right">
-                        {p.epNext.toFixed(1)} xP
+                        {nextGwXp(p).toFixed(1)} xP
                       </span>
                       <span className="text-xs text-muted-foreground w-14 text-right tabular-nums">
                         £{p.price.toFixed(1)}m
@@ -331,7 +342,7 @@ export function Dashboard() {
                     <span className="flex-1 text-sm font-medium">{player.name}</span>
                     <StatusDot status={player.status} chanceNext={player.chanceNext} />
                     <span className="w-14 text-right text-xs font-semibold text-primary tabular-nums">
-                      {player.epNext.toFixed(1)} xP
+                      {nextGwXp(player).toFixed(1)} xP
                     </span>
                   </div>
                 ))}

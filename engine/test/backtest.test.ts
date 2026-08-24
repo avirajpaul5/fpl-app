@@ -21,6 +21,7 @@ import {
   draftSquad,
   validateSquad,
   bestXI,
+  pickCaptain,
   planTransfers,
   evaluateChips,
 } from '../src/index.js';
@@ -218,6 +219,20 @@ describe('Squad legality', () => {
       const xp = projectPlayer(s, 1).projByGw[0] ?? 0;
       expect(captainXp).toBeGreaterThanOrEqual(xp - 0.001);
     }
+  });
+
+  it('prefers an attacker when captain candidates have equal next-GW xP', () => {
+    const tied = makeSamplePlayers(15).slice(0, 4);
+    tied.forEach((player) => { player.epNext = 4; });
+    tied[0]!.pos = 'GK';
+    tied[1]!.pos = 'DEF';
+    tied[2]!.pos = 'MID';
+    tied[3]!.pos = 'FWD';
+
+    const pick = pickCaptain(tied);
+
+    expect(pick.captain.pos).toBe('FWD');
+    expect(pick.viceCaptain.pos).toBe('MID');
   });
 });
 

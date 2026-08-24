@@ -13,6 +13,7 @@ import {
 import { StatusDot } from '@/components/StatusDot.tsx';
 import { PosBadge } from '@/components/PosBadge.tsx';
 import { useAppStore } from '@/store/index.ts';
+import { SquadBuilderSkeleton } from '@/components/LoadingSkeletons.tsx';
 
 type Pos = 'GK' | 'DEF' | 'MID' | 'FWD';
 
@@ -174,8 +175,9 @@ export function SquadBuilder() {
       <Alert><AlertDescription>This app does <strong>not</strong> write to FPL. Use this squad as a reference and make changes manually.</AlertDescription></Alert>
 
       {/* Squad by position */}
+      {optimize.isPending && <SquadBuilderSkeleton />}
       {squad.length > 0 && (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${optimize.isPending ? 'hidden' : ''}`}>
           {(['GK', 'DEF', 'MID', 'FWD'] as Pos[]).map((pos) => (
             <SquadSection key={pos} pos={pos} players={grouped[pos]} />
           ))}
