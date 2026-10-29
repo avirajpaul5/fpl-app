@@ -1,12 +1,34 @@
-import { Player, ProjectedPlayer, Squad, TransferPlan, TransferMove } from './types.js';
+import { ProjectedPlayer, Squad, TransferMove, TransferOption, TransferPlan } from './types.js';
 import { ENGINE_CONFIG } from './config.js';
-import { projectPlayer } from './projection.js';
+import { bestMoveSets, squadValue, type MoveSet, type SquadValueOptions } from './squad.js';
 
-interface TransferOpts {
-  maxMoves?: number;
+export interface TransferOpts extends SquadValueOptions {
   bank?: number;
   sellingPrices?: Record<number, number>;
+  maxMoves?: number;
+  gainShrink?: number;
+  freeTransferValue?: number;
+  minActionScore?: number;
+  candidatesPerPos?: number;
+  /** When false, never plan more moves than there are free transfers. */
+  allowHits?: boolean;
+  /** Upcoming GW; early-season projections rest on few matches, so gains are trusted less. */
+  gameweek?: number;
+  earlySeasonGws?: number;
 }
+
+/** Share of a projected gain trusted at this point of the season (0.5 at GW1 → 1 after the early window). */
+export function earlySeasonTrust(gameweek: number | undefined, window: number = ENGINE_CONFIG.EARLY_SEASON_GWS): number {
+  if (gameweek == null || window <= 0) return 1;
+  return 0.5 + 0.5 * Math.min(1, Math.max(0, gameweek - 1) / window);
+}
+
+/** Free transfers carried into next GW after making n transfers now. */
+export function freeTransfersAfter(freeTransfers: number, n: number): number {
+  return Math.min(ENGINE_CONFIG.MAX_FREE_TRANSFERS, Math.max(0, freeTransfers - n) + 1);
+}
+
+const fmt = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`;
 
 export function planTransfers(
   squad: Squad,
@@ -14,125 +36,103 @@ export function planTransfers(
   freeTransfers: number,
   opts: TransferOpts = {}
 ): TransferPlan {
-  const maxMoves = opts.maxMoves ?? Math.min(freeTransfers + 1, 2);
-  const moves: TransferMove[] = [];
-  let hitsTaken = 0;
+  const players = squad.players;
+  const bank = opts.bank ?? Math.max(0, ENGINE_CONFIG.BUDGET - players.reduce((s, p) => s + p.price, 0));
+  const sellingPrices = opts.sellingPrices ?? {};
+  const maxMoves = opts.maxMoves ??
+    Math.min(ENGINE_CONFIG.MAX_MOVES_PER_GW, opts.allowHits === false ? freeTransfers : freeTransfers + 1);
+  const shrink = (opts.gainShrink ?? ENGINE_CONFIG.GAIN_SHRINK) * earlySeasonTrust(opts.gameweek, opts.earlySeasonGws);
+  const ftValue = opts.freeTransferValue ?? ENGINE_CONFIG.FREE_TRANSFER_VALUE;
+  const minScore = opts.minActionScore ?? ENGINE_CONFIG.MIN_ACTION_SCORE;
+  const valueOpts: SquadValueOptions = { horizon: opts.horizon, discount: opts.discount, benchWeight: opts.benchWeight };
 
-  // Clone the squad player list for mutation tracking
-  let workingPlayers = [...squad.players] as Player[];
-  const bank = opts.bank ?? Math.max(
-    0,
-    ENGINE_CONFIG.BUDGET - workingPlayers.reduce((s, p) => s + p.price, 0)
-  );
+  const sets = bestMoveSets(players, allPlayers, {
+    ...valueOpts,
+    bank,
+    sellingPrices,
+    maxMoves,
+    candidatesPerPos: opts.candidatesPerPos,
+  });
 
-  // Build a lookup for already-owned ids
-  const ownedIds = new Set(workingPlayers.map((p) => p.id));
-
-  // Build club counts from working squad
-  const clubCount: Record<number, number> = {};
-  for (const p of workingPlayers) {
-    clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
-  }
-
-  // Index projected players by id
-  const projMap = new Map<number, ProjectedPlayer>();
-  for (const p of allPlayers) projMap.set(p.id, p);
-
-  let currentBank = bank;
-
-  for (let move = 0; move < maxMoves; move++) {
-    let bestGain = -Infinity;
-    let bestOut: Player | null = null;
-    let bestIn: ProjectedPlayer | null = null;
-
-    for (const outPlayer of workingPlayers) {
-      const outProj = projMap.get(outPlayer.id) ??
-        projectPlayer(outPlayer, ENGINE_CONFIG.TRANSFER_HORIZON_GW);
-      const outHorizon = outProj.projHorizon;
-
-      for (const inPlayer of allPlayers) {
-        // Must be same position
-        if (inPlayer.pos !== outPlayer.pos) continue;
-        // Must not already be owned
-        if (ownedIds.has(inPlayer.id)) continue;
-        // Must not be the player being swapped out in this move
-        if (inPlayer.id === outPlayer.id) continue;
-        // Affordability: price of inPlayer ≤ price of outPlayer + current bank
-        const sellingPrice = opts.sellingPrices?.[outPlayer.id] ?? outPlayer.price;
-        if (inPlayer.price > sellingPrice + currentBank) continue;
-        // Club cap: after removing outPlayer, adding inPlayer must not exceed 3/club
-        const outTeamCount = clubCount[outPlayer.team] ?? 0;
-        const inTeamCount = clubCount[inPlayer.team] ?? 0;
-        // If they're different teams, check in-player's team won't exceed cap
-        if (
-          inPlayer.team !== outPlayer.team &&
-          inTeamCount >= ENGINE_CONFIG.MAX_PER_CLUB
-        ) continue;
-
-        // Recency-chasing guard: never recommend a transfer purely on last-GW points.
-        // We evaluate over the full horizon — this naturally handles it since
-        // a one-GW-wonder shows up poorly on projHorizon.
-
-        const gain = inPlayer.projHorizon - outHorizon;
-
-        if (gain > bestGain) {
-          bestGain = gain;
-          bestOut = outPlayer;
-          bestIn = inPlayer;
-        }
-      }
-    }
-
-    if (!bestOut || !bestIn) break;
-
-    const isFree = move < freeTransfers;
-    const threshold = isFree ? ENGINE_CONFIG.FREE_TRANSFER_MIN_GAIN : ENGINE_CONFIG.HIT_MIN_GAIN;
-
-    if (bestGain <= threshold) break;
-
-    // Apply the move
-    const tookHit = !isFree;
-    if (tookHit) hitsTaken++;
-
-    const netGain = bestGain - (tookHit ? ENGINE_CONFIG.HIT_COST_PTS : 0);
-
-    moves.push({
-      out: bestOut,
-      in: bestIn,
-      outSellingPrice: opts.sellingPrices?.[bestOut.id] ?? bestOut.price,
-      gain: bestGain,
-      tookHit,
-      netGain,
+  const rollCarry = freeTransfersAfter(freeTransfers, 0);
+  const options: TransferOption[] = [];
+  const setsByN = new Map<number, MoveSet>();
+  for (let n = 0; n < sets.length; n++) {
+    const set = sets[n];
+    if (!set) continue;
+    const hits = Math.max(0, n - freeTransfers);
+    // Spending a free transfer forfeits its carry-over — worth nothing at the cap.
+    const ftCost = ftValue * (rollCarry - freeTransfersAfter(freeTransfers, n));
+    const score = n === 0 ? 0 : shrink * set.gain - ENGINE_CONFIG.HIT_COST_PTS * hits - ftCost;
+    setsByN.set(n, set);
+    options.push({
+      transfers: n,
+      hits,
+      moves: toMoves(set, players, sellingPrices, valueOpts, freeTransfers),
+      gain: set.gain,
+      score,
+      bankAfter: set.bankAfter,
     });
-
-    // Update working state
-    const bankDelta = (opts.sellingPrices?.[bestOut.id] ?? bestOut.price) - bestIn.price;
-    currentBank += bankDelta;
-
-    // Update club counts
-    clubCount[bestOut.team] = (clubCount[bestOut.team] ?? 1) - 1;
-    clubCount[bestIn.team] = (clubCount[bestIn.team] ?? 0) + 1;
-
-    // Update owned ids
-    ownedIds.delete(bestOut.id);
-    ownedIds.add(bestIn.id);
-
-    // Update working players list
-    workingPlayers = workingPlayers.map((p) =>
-      p.id === bestOut!.id ? bestIn! : p
-    );
   }
 
-  const projNetGain = moves.reduce((s, m) => s + m.gain, 0) - hitsTaken * ENGINE_CONFIG.HIT_COST_PTS;
+  const best = options.reduce((a, b) => (b.score > a.score ? b : a), options[0]!);
+  const chosen = best.transfers > 0 && best.score >= minScore ? best : options[0]!;
+  const recommendation: TransferPlan['recommendation'] =
+    chosen.transfers === 0 ? 'bank' : chosen.hits > 0 ? 'hit' : 'transfer';
 
-  let recommendation: 'bank' | 'transfer' | 'hit';
-  if (moves.length === 0) {
-    recommendation = 'bank';
-  } else if (hitsTaken > 0) {
-    recommendation = 'hit';
-  } else {
-    recommendation = 'transfer';
+  return {
+    moves: chosen.moves,
+    hitsTaken: chosen.hits,
+    projNetGain: chosen.gain - ENGINE_CONFIG.HIT_COST_PTS * chosen.hits,
+    recommendation,
+    reason: explain(chosen, options, freeTransfers, opts.horizon ?? ENGINE_CONFIG.TRANSFER_HORIZON_GW),
+    options,
+    freeTransfers,
+    freeTransfersNext: freeTransfersAfter(freeTransfers, chosen.transfers),
+  };
+}
+
+function toMoves(
+  set: MoveSet,
+  squad: ProjectedPlayer[],
+  sellingPrices: Record<number, number>,
+  valueOpts: SquadValueOptions,
+  freeTransfers: number
+): TransferMove[] {
+  if (set.outs.length === 0) return [];
+  // Attribute the combined gain to each move in proportion to its standalone gain.
+  const base = squadValue(squad, valueOpts);
+  const standalone = set.outs.map((out, i) => {
+    const swapped = squad.map((p) => (p.id === out.id ? set.ins[i]! : p));
+    return Math.max(0, squadValue(swapped, valueOpts) - base);
+  });
+  const total = standalone.reduce((s, v) => s + v, 0);
+  return set.outs.map((out, i) => {
+    const gain = total > 0 ? (set.gain * standalone[i]!) / total : set.gain / set.outs.length;
+    const tookHit = i >= freeTransfers;
+    return {
+      out,
+      in: set.ins[i]!,
+      outSellingPrice: sellingPrices[out.id] ?? out.price,
+      gain,
+      tookHit,
+      netGain: gain - (tookHit ? ENGINE_CONFIG.HIT_COST_PTS : 0),
+    };
+  });
+}
+
+function explain(chosen: TransferOption, options: TransferOption[], freeTransfers: number, horizon: number): string {
+  const ftNext = freeTransfersAfter(freeTransfers, chosen.transfers);
+  const window = `the next ${horizon} GWs`;
+  if (chosen.transfers === 0) {
+    const bestMove = options.filter((o) => o.transfers > 0).sort((a, b) => b.gain - a.gain)[0];
+    if (!bestMove) return `No legal improvement found. Roll the transfer — you'll have ${ftNext} next week.`;
+    const capped = freeTransfers >= ENGINE_CONFIG.MAX_FREE_TRANSFERS;
+    return capped
+      ? `Even the best option only adds ${fmt(bestMove.gain)} pts over ${window}. You're at the ${ENGINE_CONFIG.MAX_FREE_TRANSFERS}-transfer cap, so a free move costs nothing — but none is worth making.`
+      : `The best move adds only ${fmt(bestMove.gain)} pts over ${window}, which isn't enough to beat saving the transfer. Roll it — you'll have ${ftNext} free transfers next week.`;
   }
-
-  return { moves, hitsTaken, projNetGain, recommendation };
+  const what = chosen.transfers === 1 ? 'This move adds' : `These ${chosen.transfers} moves add`;
+  const hit = chosen.hits > 0 ? `, or ${fmt(chosen.gain - chosen.hits * ENGINE_CONFIG.HIT_COST_PTS)} after the −${chosen.hits * ENGINE_CONFIG.HIT_COST_PTS} hit` : '';
+  return `${what} a projected ${fmt(chosen.gain)} pts over ${window}${hit}. You'll carry ${ftNext} free transfer${ftNext === 1 ? '' : 's'} into next week.`;
 }

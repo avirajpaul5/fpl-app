@@ -11,8 +11,9 @@ import {
 import { cn } from '@/lib/utils.ts';
 
 const links = [
-  { to: '/',          label: 'Dashboard'     },
-  { to: '/transfers', label: 'Transfers'     },
+  { to: '/',          label: 'This Week'     },
+  { to: '/track',     label: 'Track Record'  },
+  { to: '/transfers', label: 'Players'       },
   { to: '/chips',     label: 'Chips'         },
   { to: '/squad',     label: 'Squad Builder' },
 ];
@@ -26,7 +27,7 @@ export function Navbar() {
           <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
             <Activity className="size-4" />
           </span>
-          FPL Engine
+          FPL Planner
         </Link>
         <Separator orientation="vertical" className="mx-1 h-5" />
         <NavigationMenu className="max-w-none justify-start">

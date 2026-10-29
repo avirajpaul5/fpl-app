@@ -1,18 +1,15 @@
 import { Router, Request, Response } from 'express';
-import { fetchNormalizedPlayers, getCurrentGw } from '../fplClient.js';
-import { projectPlayers } from '@fpl/engine';
 import type { Pos } from '@fpl/engine';
+import { getProjectedPlayers } from '../seasonData.js';
 
 const router = Router();
 
 export async function getPlayers(req: Request, res: Response): Promise<void> {
   try {
-    const gw = await getCurrentGw();
-    const players = await fetchNormalizedPlayers(gw);
-    const projected = projectPlayers(players);
+    const { gw, players } = await getProjectedPlayers();
 
     // Filtering
-    let result = projected;
+    let result = players;
 
     const posFilter = req.query['pos'] as string | undefined;
     if (posFilter) {
@@ -30,10 +27,11 @@ export async function getPlayers(req: Request, res: Response): Promise<void> {
       result = result.filter((p) => p.price >= minPrice);
     }
 
-    const sort = (req.query['sort'] as string) ?? 'epNext';
+    const sort = (req.query['sort'] as string) ?? 'projNext';
     const dir = (req.query['dir'] as string) === 'asc' ? 1 : -1;
+    const next = (p: (typeof result)[number]) => p.projByGw[0] ?? 0;
 
-    result = result.sort((a, b) => {
+    result = [...result].sort((a, b) => {
       switch (sort) {
         case 'epNext': return dir * (b.epNext - a.epNext);
         case 'projHorizon': return dir * (b.projHorizon - a.projHorizon);
@@ -41,7 +39,7 @@ export async function getPlayers(req: Request, res: Response): Promise<void> {
         case 'ownership': return dir * (b.ownership - a.ownership);
         case 'ppg': return dir * (b.ppg - a.ppg);
         case 'totalPoints': return dir * (b.totalPoints - a.totalPoints);
-        default: return dir * (b.epNext - a.epNext);
+        default: return dir * (next(b) - next(a));
       }
     });
 
@@ -57,8 +55,7 @@ router.get('/', getPlayers);
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const playerId = parseInt(req.params['id']!);
-    const gw = await getCurrentGw();
-    const players = await fetchNormalizedPlayers(gw);
+    const { players } = await getProjectedPlayers();
     const player = players.find((p) => p.id === playerId);
 
     if (!player) {
@@ -66,8 +63,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const projected = projectPlayers([player])[0]!;
-    res.json({ player: projected });
+    res.json({ player });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });

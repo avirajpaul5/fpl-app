@@ -23,12 +23,18 @@ interface AppState {
   chipAvailability: ChipAvailability;
   setChipUsesRemaining: (chip: keyof ChipAvailability, uses: number) => void;
   draftTeamId: number | null;
+  /** Deadline GW the draft was seeded for; a new GW re-seeds from FPL. */
+  draftGw: number | null;
   draftSquadIds: number[];
   setDraftSquadIds: (ids: number[]) => void;
   sellingPrices: Record<number, number>;
   hydrateDeadlineDraft: (team: TeamResponse, force?: boolean) => void;
   replaceDraftPlayer: (outId: number, inId: number, inPrice: number) => void;
+  /** Apply recommended transfers to the draft: swaps players, updates bank and free transfers. */
+  applyTransfers: (moves: Array<{ outId: number; outSellingPrice: number; inId: number; inPrice: number }>) => void;
   resetDeadlineDraft: (team: TeamResponse) => void;
+  allowHits: boolean;
+  setAllowHits: (allow: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -45,15 +51,18 @@ export const useAppStore = create<AppState>()(
         chipAvailability: { ...state.chipAvailability, [chip]: clampChipUses(uses) },
       })),
       draftTeamId: null,
+      draftGw: null,
       draftSquadIds: [],
       setDraftSquadIds: (ids) => set({ draftSquadIds: ids }),
       sellingPrices: {},
       hydrateDeadlineDraft: (team, force = false) => set((state) => {
-        if (!force && state.draftTeamId === team.teamId && state.draftSquadIds.length === 15) {
+        if (!force && state.draftTeamId === team.teamId && state.draftGw === team.gw &&
+          state.draftSquadIds.length === 15) {
           return state;
         }
         return {
           draftTeamId: team.teamId,
+          draftGw: team.gw,
           draftSquadIds: team.squad.map((player) => player.id),
           sellingPrices: team.sellingPrices,
           bank: team.bank,
@@ -68,8 +77,28 @@ export const useAppStore = create<AppState>()(
           [inId, inPrice],
         ]),
       })),
+      applyTransfers: (moves) => set((state) => {
+        let ids = state.draftSquadIds;
+        const prices = { ...state.sellingPrices };
+        let bank = state.bank ?? 0;
+        for (const m of moves) {
+          ids = ids.map((id) => (id === m.outId ? m.inId : id));
+          delete prices[m.outId];
+          prices[m.inId] = m.inPrice;
+          bank += m.outSellingPrice - m.inPrice;
+        }
+        return {
+          draftSquadIds: ids,
+          sellingPrices: prices,
+          bank: Number(bank.toFixed(1)),
+          freeTransfers: Math.max(0, state.freeTransfers - moves.length),
+        };
+      }),
+      allowHits: true,
+      setAllowHits: (allowHits) => set({ allowHits }),
       resetDeadlineDraft: (team) => set({
         draftTeamId: team.teamId,
+        draftGw: team.gw,
         draftSquadIds: team.squad.map((player) => player.id),
         sellingPrices: team.sellingPrices,
         bank: team.bank,
@@ -79,7 +108,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'fpl-app-store',
-      version: 1,
+      version: 2,
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<AppState>;
         if (version >= 1 || !state.chipAvailability) return state as AppState;

@@ -1,13 +1,6 @@
 import { Router, Request, Response } from 'express';
-import {
-  fetchNormalizedPlayers,
-  getCurrentGw,
-  fetchUserTeam,
-  fetchEntry,
-  fetchEntryHistory,
-} from '../fplClient.js';
-import { projectPlayers } from '@fpl/engine';
-import { inferChipAvailability } from '../chipAvailability.js';
+import { getProjectedPlayers } from '../seasonData.js';
+import { loadManagerState } from '../managerState.js';
 
 const router = Router();
 
@@ -19,52 +12,33 @@ router.get('/:teamId', async (req: Request, res: Response) => {
       return;
     }
 
-    const gw = await getCurrentGw();
-    const [players, userTeam, entry, history] = await Promise.all([
-      fetchNormalizedPlayers(gw),
-      fetchUserTeam(teamId, gw - 1 > 0 ? gw - 1 : gw),
-      fetchEntry(teamId),
-      fetchEntryHistory(teamId),
-    ]);
-
+    const { gw, players, data } = await getProjectedPlayers();
+    const state = await loadManagerState(teamId, data);
     const playerMap = new Map(players.map((p) => [p.id, p]));
-    const picks = userTeam.picks;
-
-    const squadPlayers = picks
-      .map((pick) => playerMap.get(pick.element))
-      .filter(Boolean) as ReturnType<typeof playerMap.get>[];
-
-    const projected = projectPlayers(squadPlayers as Parameters<typeof projectPlayers>[0]);
-
-    const latestHistory = [...history.current].sort((a, b) => b.event - a.event)[0];
-    const bank = latestHistory ? latestHistory.bank / 10 : 0;
-    const sellingPrices = Object.fromEntries(
-      picks.map((pick) => {
-        const fallback = playerMap.get(pick.element)?.price ?? 0;
-        return [pick.element, (pick.selling_price ?? pick.purchase_price ?? fallback * 10) / 10];
-      })
-    );
-    const captain = picks.find((p) => p.is_captain);
-    const viceCaptain = picks.find((p) => p.is_vice_captain);
+    const captain = state.picks.find((p) => p.is_captain);
+    const viceCaptain = state.picks.find((p) => p.is_vice_captain);
 
     res.json({
       gw,
+      deadline: data.deadlines[gw] ?? null,
       teamId,
       manager: {
-        name: `${entry.player_first_name} ${entry.player_last_name}`,
-        overallRank: entry.summary_overall_rank,
-        overallPoints: entry.summary_overall_points,
+        name: `${state.entry.player_first_name} ${state.entry.player_last_name}`,
+        teamName: state.entry.name ?? null,
+        overallRank: state.entry.summary_overall_rank,
+        overallPoints: state.entry.summary_overall_points,
       },
-      squad: projected,
+      squad: state.squadIds.map((id) => playerMap.get(id)).filter(Boolean),
       captainId: captain?.element ?? null,
       viceCaptainId: viceCaptain?.element ?? null,
-      bank: parseFloat(bank.toFixed(1)),
-      sellingPrices,
-      freeTransfers: 1,
-      freeTransfersSource: 'manual',
-      chipAvailability: inferChipAvailability(history.chips, gw),
-      chipsUsed: history.chips,
-      activeChip: userTeam.activeChip,
+      bank: parseFloat(state.bank.toFixed(1)),
+      sellingPrices: state.sellingPrices,
+      freeTransfers: state.freeTransfers,
+      freeTransfersSource: 'inferred',
+      chipAvailability: state.chipAvailability,
+      chipsUsableNow: state.chipsUsableNow,
+      chipsUsed: state.history.chips,
+      activeChip: state.activeChip,
     });
   } catch (err) {
     console.error(err);

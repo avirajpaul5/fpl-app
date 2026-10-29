@@ -1,6 +1,5 @@
-import { Player, ProjectedPlayer, Squad, XI } from './types.js';
+import { Player, Pos, ProjectedPlayer, Squad, XI } from './types.js';
 import { ENGINE_CONFIG } from './config.js';
-import { projectPlayer } from './projection.js';
 import { pickCaptain } from './captain.js';
 
 export interface ValidationResult {
@@ -8,7 +7,7 @@ export interface ValidationResult {
   errors: string[];
 }
 
-export function validateSquad(squad: Squad, _atPrices?: Record<number, number>): ValidationResult {
+export function validateSquad(squad: { players: Player[] }, _atPrices?: Record<number, number>): ValidationResult {
   const errors: string[] = [];
   const { players } = squad;
 
@@ -31,7 +30,7 @@ export function validateSquad(squad: Squad, _atPrices?: Record<number, number>):
   const clubCounts: Record<number, number> = {};
   for (const p of players) {
     clubCounts[p.team] = (clubCounts[p.team] ?? 0) + 1;
-    if (clubCounts[p.team] > ENGINE_CONFIG.MAX_PER_CLUB) {
+    if (clubCounts[p.team] === ENGINE_CONFIG.MAX_PER_CLUB + 1) {
       errors.push(`Too many players from team ${p.team} (max ${ENGINE_CONFIG.MAX_PER_CLUB})`);
     }
   }
@@ -54,155 +53,341 @@ export function validateSquad(squad: Squad, _atPrices?: Record<number, number>):
   return { ok: errors.length === 0, errors };
 }
 
-export function bestXI(squad: Squad, gwIndex: number = 0): XI {
-  const projected = squad.players.map((p) => projectPlayer(p, gwIndex + 1));
+const MIN_START: Record<Pos, number> = { GK: 1, DEF: 3, MID: 2, FWD: 1 };
+const MAX_START: Record<Pos, number> = { GK: 1, DEF: 5, MID: 5, FWD: 3 };
+const POS_ORDER: Record<Pos, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 
-  // Sort by projected xP for the given GW, descending
-  const sorted = [...projected].sort((a, b) => (b.projByGw[gwIndex] ?? 0) - (a.projByGw[gwIndex] ?? 0));
-
-  // Formation bounds from config
-  const minPos: Record<string, number> = { GK: 1, DEF: 3, MID: 2, FWD: 1 };
-  const maxPos: Record<string, number> = { GK: 1, DEF: 5, MID: 5, FWD: 3 };
-
-  const starters: ProjectedPlayer[] = [];
-  const posCount: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
-
-  // Phase 1: satisfy minimums in xP order
-  const remaining = [...sorted];
-  for (const pos of ['GK', 'DEF', 'MID', 'FWD']) {
-    let needed = minPos[pos]!;
-    for (let i = remaining.length - 1; i >= 0 && needed > 0; i--) {
-      // scan from low-xP end to preserve high-xP players for phase 2
-    }
-    // Actually scan from high-xP end to get best players for minimums
-    for (let i = 0; i < remaining.length && needed > 0; i++) {
-      if (remaining[i]!.pos === pos) {
-        starters.push(remaining[i]!);
-        posCount[pos] = (posCount[pos] ?? 0) + 1;
-        remaining.splice(i, 1);
-        needed--;
-        i--;
-      }
-    }
-  }
-
-  // Phase 2: fill remaining 11 - current slots, respecting maxima
-  const slotsLeft = 11 - starters.length;
-  let filled = 0;
-  for (let i = 0; i < remaining.length && filled < slotsLeft; i++) {
-    const p = remaining[i]!;
-    const currentCount = posCount[p.pos] ?? 0;
-    if (currentCount < maxPos[p.pos]!) {
+/**
+ * Highest-scoring legal XI for one gameweek. Taking the best players needed to
+ * meet each position minimum, then the best of the rest within the maxima, is
+ * optimal for FPL's formation rules.
+ */
+export function selectXI<T extends { pos: Pos }>(players: T[], score: (p: T) => number): { starters: T[]; bench: T[] } {
+  const sorted = [...players].sort((a, b) => score(b) - score(a));
+  const starters: T[] = [];
+  const used = new Set<T>();
+  const count: Record<Pos, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const pos of ['GK', 'DEF', 'MID', 'FWD'] as Pos[]) {
+    for (const p of sorted) {
+      if (count[pos] >= MIN_START[pos]) break;
+      if (p.pos !== pos) continue;
       starters.push(p);
-      posCount[p.pos] = currentCount + 1;
-      filled++;
+      used.add(p);
+      count[pos]++;
     }
   }
+  for (const p of sorted) {
+    if (starters.length >= 11) break;
+    if (used.has(p) || count[p.pos] >= MAX_START[p.pos]) continue;
+    starters.push(p);
+    used.add(p);
+    count[p.pos]++;
+  }
+  // Bench: outfield players by projection, reserve goalkeeper last (FPL bench order).
+  const bench = sorted.filter((p) => !used.has(p));
+  bench.sort((a, b) => (a.pos === 'GK' ? 1 : 0) - (b.pos === 'GK' ? 1 : 0) || score(b) - score(a));
+  return { starters, bench };
+}
 
-  // Sort starters: GK first, then by position order, then by xP
-  const posOrder: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
-  starters.sort((a, b) => {
-    const posD = (posOrder[a.pos] ?? 0) - (posOrder[b.pos] ?? 0);
-    if (posD !== 0) return posD;
-    return (b.projByGw[gwIndex] ?? 0) - (a.projByGw[gwIndex] ?? 0);
-  });
+export interface SquadValueOptions {
+  horizon?: number;
+  /** Weight of GW+k relative to GW+0 is discount^k. */
+  discount?: number;
+  /** Value of a bench point (they only count through auto-subs). */
+  benchWeight?: number;
+}
 
-  const captainPick = pickCaptain(starters, gwIndex);
-  const captain = captainPick.captain;
-  const viceCaptain = captainPick.viceCaptain;
+/**
+ * Expected FPL points a squad would score over the horizon if its best XI is
+ * picked each week and the top projection is captained.
+ */
+export function squadValue(players: ProjectedPlayer[], opts: SquadValueOptions = {}): number {
+  const horizon = opts.horizon ?? ENGINE_CONFIG.TRANSFER_HORIZON_GW;
+  const discount = opts.discount ?? ENGINE_CONFIG.HORIZON_DISCOUNT;
+  const benchWeight = opts.benchWeight ?? ENGINE_CONFIG.BENCH_WEIGHT;
+  let total = 0;
+  let w = 1;
+  for (let k = 0; k < horizon; k++) {
+    total += w * gwValue(players, k, benchWeight);
+    w *= discount;
+  }
+  return total;
+}
 
-  const starterIds = new Set(starters.map((p) => p.id));
-  const bench = projected
-    .filter((p) => !starterIds.has(p.id))
-    .sort((a, b) => {
-      if (a.pos === 'GK' && b.pos !== 'GK') return 1;
-      if (a.pos !== 'GK' && b.pos === 'GK') return -1;
-      return (b.projByGw[gwIndex] ?? 0) - (a.projByGw[gwIndex] ?? 0);
-    });
+// Hot path for the transfer search: reuses buffers instead of allocating.
+const POS_INDEX: Record<Pos, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+const MIN_BY_INDEX = [1, 3, 2, 1];
+const MAX_BY_INDEX = [1, 5, 5, 3];
+let order = new Int32Array(16);
+let vals = new Float64Array(16);
+let posIdx = new Int32Array(16);
+let taken = new Uint8Array(16);
 
+function gwValue(players: ProjectedPlayer[], k: number, benchWeight: number): number {
+  const n = players.length;
+  if (order.length < n) {
+    order = new Int32Array(n);
+    vals = new Float64Array(n);
+    posIdx = new Int32Array(n);
+    taken = new Uint8Array(n);
+  }
+  for (let i = 0; i < n; i++) {
+    const p = players[i]!;
+    vals[i] = p.projByGw[k] ?? 0;
+    posIdx[i] = POS_INDEX[p.pos];
+    taken[i] = 0;
+    // Insertion sort by value, descending (n = 15).
+    let j = i - 1;
+    while (j >= 0 && vals[order[j]!]! < vals[i]!) {
+      order[j + 1] = order[j]!;
+      j--;
+    }
+    order[j + 1] = i;
+  }
+  const count = [0, 0, 0, 0];
+  let xi = 0;
+  let starters = 0;
+  let captain = 0;
+  for (let pos = 0; pos < 4; pos++) {
+    for (let r = 0; r < n && count[pos]! < MIN_BY_INDEX[pos]!; r++) {
+      const i = order[r]!;
+      if (posIdx[i] !== pos) continue;
+      taken[i] = 1;
+      count[pos]!++;
+      starters++;
+      xi += vals[i]!;
+      if (vals[i]! > captain) captain = vals[i]!;
+    }
+  }
+  for (let r = 0; r < n && starters < 11; r++) {
+    const i = order[r]!;
+    const pos = posIdx[i]!;
+    if (taken[i] || count[pos]! >= MAX_BY_INDEX[pos]!) continue;
+    taken[i] = 1;
+    count[pos]!++;
+    starters++;
+    xi += vals[i]!;
+    if (vals[i]! > captain) captain = vals[i]!;
+  }
+  let bench = 0;
+  for (let i = 0; i < n; i++) if (!taken[i] && posIdx[i] !== 0) bench += vals[i]!;
+  return xi + captain + benchWeight * bench;
+}
+
+export function bestXI(squad: { players: ProjectedPlayer[] }, gwIndex: number = 0): XI {
+  const score = (p: ProjectedPlayer) => p.projByGw[gwIndex] ?? 0;
+  const { starters, bench } = selectXI(squad.players, score);
+  starters.sort((a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos] || score(b) - score(a));
+  const { captain, viceCaptain } = pickCaptain(starters, gwIndex);
   return { starters, bench, captain, viceCaptain };
 }
 
-export function draftSquad(players: ProjectedPlayer[]): Squad {
-  // Sort by xP-per-million (projected horizon ÷ price)
-  const available = [...players]
-    .filter((p) => p.price > 0 && p.projHorizon > 0)
-    .sort((a, b) => b.projHorizon / b.price - a.projHorizon / a.price);
+interface OptimizeOptions extends SquadValueOptions {
+  budget?: number;
+  locked?: number[];
+  excluded?: number[];
+}
 
-  const squad: Player[] = [];
-  const posCount: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+/**
+ * Best 15-man squad within budget: a value-per-£ greedy start followed by
+ * hill-climbing over single and paired swaps scored by squadValue.
+ */
+export function optimizeSquad(players: ProjectedPlayer[], opts: OptimizeOptions = {}): Squad {
+  const budget = opts.budget ?? ENGINE_CONFIG.BUDGET;
+  const locked = new Set(opts.locked ?? []);
+  const excluded = new Set(opts.excluded ?? []);
+  const pool = players.filter((p) => !excluded.has(p.id) && p.price > 0);
+  const horizonScore = (p: ProjectedPlayer) => p.projByGw.slice(0, opts.horizon ?? ENGINE_CONFIG.TRANSFER_HORIZON_GW)
+    .reduce((s, v) => s + v, 0);
+
+  const squad: ProjectedPlayer[] = pool.filter((p) => locked.has(p.id));
+  const posCount: Record<Pos, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
   const clubCount: Record<number, number> = {};
-  const addedIds = new Set<number>();
-
-  function totalCost(): number {
-    return squad.reduce((s, p) => s + p.price, 0);
+  for (const p of squad) {
+    posCount[p.pos]++;
+    clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
   }
+  const cost = () => squad.reduce((s, p) => s + p.price, 0);
+  const cheapest = (pos: Pos) => Math.min(...pool.filter((p) => p.pos === pos).map((p) => p.price));
+  const reserveFor = () => (['GK', 'DEF', 'MID', 'FWD'] as Pos[])
+    .reduce((s, pos) => s + Math.max(0, ENGINE_CONFIG.SQUAD_QUOTA[pos]! - posCount[pos]) * cheapest(pos), 0);
 
-  function slotsRemaining(): number {
-    return ENGINE_CONFIG.SQUAD_SIZE - squad.length;
-  }
-
-  function canAdd(p: Player): boolean {
-    if (addedIds.has(p.id)) return false;
-    if ((posCount[p.pos] ?? 0) >= ENGINE_CONFIG.SQUAD_QUOTA[p.pos]!) return false;
-    if ((clubCount[p.team] ?? 0) >= ENGINE_CONFIG.MAX_PER_CLUB) return false;
-
-    const remaining = slotsRemaining() - 1; // slots after adding this player
-    const minBudgetNeeded = remaining * ENGINE_CONFIG.MIN_RESERVE_PER_SLOT;
-    const budgetAfter = ENGINE_CONFIG.BUDGET - totalCost() - p.price;
-    if (budgetAfter < minBudgetNeeded) return false;
-
-    return true;
-  }
-
-  // Greedy fill by xP/£
-  for (const p of available) {
+  // Greedy start by value per £ above the cheapest option, keeping room to finish the squad.
+  const byValue = [...pool].sort((a, b) =>
+    horizonScore(b) / Math.max(0.5, b.price - 3.5) - horizonScore(a) / Math.max(0.5, a.price - 3.5));
+  for (const p of byValue) {
     if (squad.length >= ENGINE_CONFIG.SQUAD_SIZE) break;
-    if (canAdd(p)) {
-      squad.push(p);
-      posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
-      clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
-      addedIds.add(p.id);
-    }
+    if (squad.includes(p) || posCount[p.pos] >= ENGINE_CONFIG.SQUAD_QUOTA[p.pos]!) continue;
+    if ((clubCount[p.team] ?? 0) >= ENGINE_CONFIG.MAX_PER_CLUB) continue;
+    posCount[p.pos]++;
+    const fits = cost() + p.price + reserveFor() <= budget + 1e-6;
+    posCount[p.pos]--;
+    if (!fits) continue;
+    squad.push(p);
+    posCount[p.pos]++;
+    clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
+  }
+  if (squad.length < ENGINE_CONFIG.SQUAD_SIZE) {
+    throw new Error('optimizeSquad could not fill a legal squad within budget');
   }
 
-  // Fill any remaining quota gaps with cheapest valid players
-  if (squad.length < ENGINE_CONFIG.SQUAD_SIZE) {
-    const byPrice = [...players]
-      .filter((p) => !addedIds.has(p.id))
-      .sort((a, b) => a.price - b.price);
+  // Hill-climb: cheap single swaps until they stall, then try a paired swap
+  // (sell one to fund another) and go back to singles if it helped.
+  let current = squad;
+  for (let iter = 0; iter < 60; iter++) {
+    const bank = budget - current.reduce((s, p) => s + p.price, 0);
+    const sell = Object.fromEntries(current.map((p) => [p.id, p.price]));
+    const search = { ...opts, bank, sellingPrices: sell, locked, candidatesPerPos: 15 };
+    const single = searchMoves(current, pool, { ...search, maxMoves: 1 });
+    if (single && single.gain > 1e-6) {
+      current = single.squad;
+      continue;
+    }
+    const pair = searchMoves(current, pool, { ...search, maxMoves: 2 });
+    if (!pair || pair.gain <= 1e-6) break;
+    current = pair.squad;
+  }
+  return { players: current };
+}
 
-    for (const p of byPrice) {
-      if (squad.length >= ENGINE_CONFIG.SQUAD_SIZE) break;
-      const posNeeded =
-        (posCount[p.pos] ?? 0) < ENGINE_CONFIG.SQUAD_QUOTA[p.pos]!;
-      const clubOk = (clubCount[p.team] ?? 0) < ENGINE_CONFIG.MAX_PER_CLUB;
-      const budgetOk = totalCost() + p.price <= ENGINE_CONFIG.BUDGET;
-      if (posNeeded && clubOk && budgetOk && !addedIds.has(p.id)) {
-        squad.push(p);
-        posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
-        clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
-        addedIds.add(p.id);
+// ---- Transfer search shared by the planner and the optimizer ----
+
+export interface MoveSearchOptions extends SquadValueOptions {
+  bank: number;
+  sellingPrices: Record<number, number>;
+  maxMoves: number;
+  locked?: Set<number>;
+  /** Incoming candidates per position considered (by projected value). */
+  candidatesPerPos?: number;
+  /** Players that must not be bought (e.g. sold earlier in the same plan). */
+  excludeIds?: Set<number>;
+}
+
+export interface MoveSet {
+  outs: ProjectedPlayer[];
+  ins: ProjectedPlayer[];
+  squad: ProjectedPlayer[];
+  gain: number;
+  bankAfter: number;
+}
+
+/** Best set of exactly n moves for each n ≤ maxMoves (index = n). */
+export function bestMoveSets(
+  squad: ProjectedPlayer[],
+  pool: ProjectedPlayer[],
+  opts: MoveSearchOptions
+): Array<MoveSet | null> {
+  const value = (players: ProjectedPlayer[]) => squadValue(players, opts);
+  const base = value(squad);
+  const owned = new Set(squad.map((p) => p.id));
+  const horizon = opts.horizon ?? ENGINE_CONFIG.TRANSFER_HORIZON_GW;
+  const candN = opts.candidatesPerPos ?? 20;
+  const sumProj = (p: ProjectedPlayer) => p.projByGw.slice(0, horizon).reduce((s, v) => s + v, 0);
+
+  // Candidate pool per position: best projected players plus a few cheap enablers.
+  const candidates: Record<Pos, ProjectedPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+  for (const pos of ['GK', 'DEF', 'MID', 'FWD'] as Pos[]) {
+    const ofPos = pool.filter((p) => p.pos === pos && !owned.has(p.id) && !opts.excludeIds?.has(p.id));
+    const top = [...ofPos].sort((a, b) => sumProj(b) - sumProj(a)).slice(0, pos === 'GK' ? Math.ceil(candN / 2) : candN);
+    const cheap = [...ofPos].filter((p) => (p.pStart ?? 0) > 0.6).sort((a, b) => a.price - b.price || sumProj(b) - sumProj(a)).slice(0, 4);
+    candidates[pos] = [...new Set([...top, ...cheap])];
+  }
+
+  const sell = (p: ProjectedPlayer) => opts.sellingPrices[p.id] ?? p.price;
+  const clubCount: Record<number, number> = {};
+  for (const p of squad) clubCount[p.team] = (clubCount[p.team] ?? 0) + 1;
+  const outs = squad.filter((p) => !opts.locked?.has(p.id));
+
+  const results: Array<MoveSet | null> = [{ outs: [], ins: [], squad, gain: 0, bankAfter: opts.bank }];
+  if (opts.maxMoves < 1) return results;
+
+  const apply = (outIds: ProjectedPlayer[], ins: ProjectedPlayer[]) =>
+    squad.map((p) => {
+      const i = outIds.indexOf(p);
+      return i >= 0 ? ins[i]! : p;
+    });
+
+  const clubOk = (outList: ProjectedPlayer[], inList: ProjectedPlayer[]) => {
+    const delta: Record<number, number> = {};
+    for (const p of outList) delta[p.team] = (delta[p.team] ?? 0) - 1;
+    for (const p of inList) delta[p.team] = (delta[p.team] ?? 0) + 1;
+    return Object.entries(delta).every(([t, d]) => d <= 0 || (clubCount[Number(t)] ?? 0) + d <= ENGINE_CONFIG.MAX_PER_CLUB);
+  };
+
+  // Every single swap, scored without the budget so pairs can reuse the gains.
+  const swapGain = new Map<ProjectedPlayer, Array<{ c: ProjectedPlayer; gain: number }>>();
+  let bestSingle: MoveSet | null = null;
+  for (const o of outs) {
+    const list: Array<{ c: ProjectedPlayer; gain: number }> = [];
+    for (const c of candidates[o.pos]) {
+      if (!clubOk([o], [c])) continue;
+      const next = apply([o], [c]);
+      const gain = value(next) - base;
+      list.push({ c, gain });
+      const bankAfter = opts.bank + sell(o) - c.price;
+      if (bankAfter >= -1e-6 && (!bestSingle || gain > bestSingle.gain)) {
+        bestSingle = { outs: [o], ins: [c], squad: next, gain, bankAfter };
+      }
+    }
+    list.sort((a, b) => b.gain - a.gain);
+    swapGain.set(o, list);
+  }
+  results[1] = bestSingle;
+  if (opts.maxMoves < 2) return results;
+
+  // Pairs let one sale fund another upgrade. Each outgoing player is paired
+  // using its strongest replacements plus its cheapest (budget-freeing) ones.
+  const shortlist = new Map<ProjectedPlayer, ProjectedPlayer[]>();
+  for (const [o, list] of swapGain) {
+    const strongest = list.slice(0, 6).map((x) => x.c);
+    const cheapest = [...list].sort((a, b) => a.c.price - b.c.price || b.gain - a.gain).slice(0, 3).map((x) => x.c);
+    shortlist.set(o, [...new Set([...strongest, ...cheapest])]);
+  }
+  let bestPair: MoveSet | null = null;
+  for (let i = 0; i < outs.length; i++) {
+    for (let j = i + 1; j < outs.length; j++) {
+      const o1 = outs[i]!, o2 = outs[j]!;
+      const funds = opts.bank + sell(o1) + sell(o2);
+      for (const c1 of shortlist.get(o1) ?? []) {
+        if (c1.price > funds) continue;
+        for (const c2 of shortlist.get(o2) ?? []) {
+          if (c1 === c2 || c1.price + c2.price > funds + 1e-6) continue;
+          if (!clubOk([o1, o2], [c1, c2])) continue;
+          const next = apply([o1, o2], [c1, c2]);
+          const gain = value(next) - base;
+          if (!bestPair || gain > bestPair.gain) {
+            bestPair = { outs: [o1, o2], ins: [c1, c2], squad: next, gain, bankAfter: funds - c1.price - c2.price };
+          }
+        }
       }
     }
   }
+  results[2] = bestPair;
 
-  const result: Squad = { players: squad };
-
-  // Guard: assert result is exactly 15 and legal
-  const validation = validateSquad(result);
-  if (!validation.ok) {
-    throw new Error(`draftSquad produced illegal squad: ${validation.errors.join('; ')}`);
+  // Three or more moves: extend the best set greedily one move at a time.
+  let prev = bestPair;
+  for (let n = 3; n <= opts.maxMoves && prev; n++) {
+    const sub = bestMoveSets(prev.squad, pool, {
+      ...opts,
+      bank: prev.bankAfter,
+      maxMoves: 1,
+      locked: new Set([...(opts.locked ?? []), ...prev.ins.map((p) => p.id)]),
+      excludeIds: new Set([...(opts.excludeIds ?? []), ...prev.outs.map((p) => p.id)]),
+    })[1];
+    if (!sub) break;
+    prev = {
+      outs: [...prev.outs, ...sub.outs],
+      ins: [...prev.ins, ...sub.ins],
+      squad: sub.squad,
+      gain: prev.gain + sub.gain,
+      bankAfter: sub.bankAfter,
+    };
+    results[n] = prev;
   }
-
-  return result;
+  return results;
 }
 
-export function rebuildSquad(
-  players: ProjectedPlayer[],
-  _fromGw: number,
-  _horizon: number
-): Squad {
-  // Same as draft but players are already projected from the given GW over the horizon
-  return draftSquad(players);
+function searchMoves(squad: ProjectedPlayer[], pool: ProjectedPlayer[], opts: MoveSearchOptions): MoveSet | null {
+  const sets = bestMoveSets(squad, pool, opts).filter((s): s is MoveSet => s != null && s.outs.length > 0);
+  return sets.sort((a, b) => b.gain - a.gain)[0] ?? null;
 }

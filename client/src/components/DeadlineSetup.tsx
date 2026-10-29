@@ -93,10 +93,10 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Deadline setup
+              Squad &amp; settings
             </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Seeded from your last published team. Correct this local draft to match any private moves.
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+              Detected from your FPL history: last published squad, bank, {team.freeTransfers} free transfer{team.freeTransfers === 1 ? '' : 's'} and chips. If you've already made moves for GW{team.gw}, mirror them here — the plan above updates instantly.
             </p>
           </div>
           <Button
@@ -129,7 +129,9 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="free-transfers" className="text-xs text-muted-foreground">Free transfers available</Label>
+            <Label htmlFor="free-transfers" className="text-xs text-muted-foreground">
+              Free transfers available <span className="text-muted-foreground/70">(detected {team.freeTransfers})</span>
+            </Label>
             <Input
               id="free-transfers"
               type="number"

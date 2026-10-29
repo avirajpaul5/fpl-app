@@ -12,3 +12,6 @@ coverage/
 
 .vercel/
 .env.local
+
+# Backtest data downloads
+engine/backtest/.cache/

@@ -55,3 +55,25 @@ describe('inferChipAvailability', () => {
     ], 23).tripleCaptain).toBe(0);
   });
 });
+
+describe('chipsUsableNow', () => {
+  it('blocks a first-half chip once its first-half use is spent', async () => {
+    const { chipsUsableNow } = await import('./chipAvailability.js');
+    expect(chipsUsableNow({ wildcard: 2, freeHit: 1, benchBoost: 1, tripleCaptain: 2 }, 9)).toEqual({
+      wildcard: 1,
+      freeHit: 0,
+      benchBoost: 0,
+      tripleCaptain: 1,
+    });
+  });
+
+  it('allows one use per chip in the second half', async () => {
+    const { chipsUsableNow } = await import('./chipAvailability.js');
+    expect(chipsUsableNow({ wildcard: 1, freeHit: 0, benchBoost: 1, tripleCaptain: 1 }, 25)).toEqual({
+      wildcard: 1,
+      freeHit: 0,
+      benchBoost: 1,
+      tripleCaptain: 1,
+    });
+  });
+});

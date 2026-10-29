@@ -1,7 +1,6 @@
-import { Player, CaptainPick } from './types.js';
-import { projectPlayer } from './projection.js';
+import { ProjectedPlayer, CaptainPick } from './types.js';
 
-const CAPTAIN_POSITION_TIE_BREAK: Record<Player['pos'], number> = {
+const CAPTAIN_POSITION_TIE_BREAK: Record<ProjectedPlayer['pos'], number> = {
   FWD: 0,
   MID: 1,
   DEF: 2,
@@ -9,8 +8,8 @@ const CAPTAIN_POSITION_TIE_BREAK: Record<Player['pos'], number> = {
 };
 
 function compareCaptainCandidates(
-  a: { player: Player; projXp: number },
-  b: { player: Player; projXp: number }
+  a: { player: ProjectedPlayer; projXp: number },
+  b: { player: ProjectedPlayer; projXp: number }
 ): number {
   const xpDifference = b.projXp - a.projXp;
   if (Math.abs(xpDifference) > 0.001) return xpDifference;
@@ -22,14 +21,10 @@ function compareCaptainCandidates(
   return b.player.ownership - a.player.ownership;
 }
 
-// Captain = argmax(starter.projByGw[0])
-// No premium-bias adjustment (tested, no gain). Exact xP ties prefer attacking
+// Captain = argmax(starter.projByGw[gwIndex]). Exact ties prefer attacking
 // positions, then ownership, so squad ordering cannot accidentally captain a GK.
-export function pickCaptain(starters: Player[], gwIndex: number = 0): CaptainPick {
-  const projected = starters.map((p) => ({
-    player: p,
-    projXp: projectPlayer(p, gwIndex + 1).projByGw[gwIndex] ?? 0,
-  }));
+export function pickCaptain(starters: ProjectedPlayer[], gwIndex: number = 0): CaptainPick {
+  const projected = starters.map((p) => ({ player: p, projXp: p.projByGw[gwIndex] ?? 0 }));
 
   projected.sort(compareCaptainCandidates);
 

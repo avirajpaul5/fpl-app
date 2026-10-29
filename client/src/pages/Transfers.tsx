@@ -18,6 +18,8 @@ import { Label } from '@/components/ui/label.tsx';
 import { PosBadge } from '@/components/PosBadge.tsx';
 import { StatusDot } from '@/components/StatusDot.tsx';
 import { PlayerTableSkeleton } from '@/components/LoadingSkeletons.tsx';
+import { XpBreakdown } from '@/components/XpBreakdown.tsx';
+import { TooltipProvider } from '@/components/ui/tooltip.tsx';
 
 type SortKey = 'epNext' | 'projHorizon' | 'price' | 'ownership' | 'ppg' | 'totalPoints';
 type SortDir = 'asc' | 'desc';
@@ -118,8 +120,14 @@ export function Transfers() {
   }
 
   return (
+    <TooltipProvider>
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-      <h1 className="text-xl font-bold tracking-tight">Transfer Planner</h1>
+      <div>
+        <h1 className="text-xl font-bold tracking-tight">Players</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Expected points from the app’s model (hover a score for its breakdown). Pick an OUT and an IN player to compare them.
+        </p>
+      </div>
 
       {/* Compare tray */}
       {(outP || inP) && (
@@ -284,6 +292,7 @@ export function Transfers() {
                 <SortHead col="price" className="text-right" />
                 <SortHead col="epNext" className="text-right" />
                 <SortHead col="projHorizon" className="text-right" />
+                <TableHead className="text-right">Mins</TableHead>
                 <SortHead col="ppg" className="text-right" />
                 <SortHead col="ownership" className="text-right" />
                 <SortHead col="totalPoints" className="text-right" />
@@ -308,9 +317,10 @@ export function Transfers() {
                     <TableCell className="text-muted-foreground text-sm">{p.teamName}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums">£{p.price.toFixed(1)}m</TableCell>
                     <TableCell className="text-right">
-                      <span className="text-primary font-semibold text-sm tabular-nums">{nextGwXp(p).toFixed(1)}</span>
+                      <XpBreakdown player={p} className="cursor-help text-sm font-semibold text-primary tabular-nums" />
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{p.projHorizon.toFixed(1)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{Math.round(p.xMins ?? 0)}</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.ppg.toFixed(1)}</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.ownership.toFixed(1)}%</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.totalPoints}</TableCell>
@@ -363,5 +373,6 @@ export function Transfers() {
         <Alert><AlertTitle>No players match</AlertTitle><AlertDescription>Try clearing a filter or increasing the maximum price.</AlertDescription></Alert>
       )}
     </div>
+    </TooltipProvider>
   );
 }

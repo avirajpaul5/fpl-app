@@ -6,6 +6,7 @@ import playersRouter from './routes/players.js';
 import teamRouter from './routes/team.js';
 import recommendRouter from './routes/recommend.js';
 import optimizeRouter from './routes/optimize.js';
+import trackRouter from './routes/track.js';
 
 const app = express();
 
@@ -31,5 +32,6 @@ app.use('/api/players', playersRouter);
 app.use('/api/team', teamRouter);
 app.use('/api/recommend', recommendRouter);
 app.use('/api/optimize', optimizeRouter);
+app.use('/api/track', trackRouter);
 
 export default app;

@@ -47,10 +47,28 @@ export interface Player {
   ownership: number;
   status: string;
   chanceNext: number | null;
+  news?: string;
   totalPoints: number;
   upcoming: UpcomingFixture[];
+  /** Expected points for the next GWs (index 0 = upcoming deadline). */
   projByGw: number[];
+  /** Sum of the next five GWs. */
   projHorizon: number;
+  xMins?: number;
+  pStart?: number;
+  breakdown?: PointsBreakdown;
+}
+
+export interface PointsBreakdown {
+  appearance: number;
+  goals: number;
+  assists: number;
+  cleanSheet: number;
+  goalsConceded: number;
+  saves: number;
+  bonus: number;
+  defcon: number;
+  cards: number;
 }
 
 export interface TransferMove {
@@ -62,11 +80,24 @@ export interface TransferMove {
   netGain: number;
 }
 
+export interface TransferOption {
+  transfers: number;
+  hits: number;
+  moves: TransferMove[];
+  gain: number;
+  score: number;
+  bankAfter: number;
+}
+
 export interface TransferPlan {
   moves: TransferMove[];
   hitsTaken: number;
   projNetGain: number;
   recommendation: 'bank' | 'transfer' | 'hit';
+  reason: string;
+  options: TransferOption[];
+  freeTransfers: number;
+  freeTransfersNext: number;
 }
 
 export interface ChipAdvice {
@@ -103,6 +134,7 @@ export interface XI {
 
 export interface RecommendBundle {
   gw: number;
+  deadline: string | null;
   deadlineDraft: DeadlineDraft;
   xi: XI;
   captain: CaptainPick;
@@ -120,18 +152,69 @@ export interface DeadlineDraft {
 
 export interface TeamResponse {
   gw: number;
+  deadline: string | null;
   teamId: number;
-  manager: { name: string; overallRank: number; overallPoints: number };
+  manager: { name: string; teamName: string | null; overallRank: number; overallPoints: number };
   squad: Player[];
   captainId: number | null;
   viceCaptainId: number | null;
   bank: number;
   sellingPrices: Record<number, number>;
   freeTransfers: number;
-  freeTransfersSource: 'manual';
+  freeTransfersSource: 'inferred';
   chipAvailability: ChipAvailability;
+  /** Chips playable this gameweek (first-half chips expire after GW19). */
+  chipsUsableNow: ChipAvailability;
   chipsUsed: Array<{ name: string; event: number }>;
   activeChip: string | null;
+}
+
+export interface TrackMove { out: number; in: number }
+
+export interface TrackWeek {
+  gw: number;
+  chip: string | null;
+  freeTransfers: number;
+  you: { points: number; transfers: TrackMove[]; hits: number; captain: number; captainPoints: number; movesRealised: number };
+  app: {
+    transfers: TrackMove[];
+    hits: number;
+    reason: string;
+    captain: number;
+    captainPoints: number;
+    captainDelta: number;
+    movesRealised: number;
+    projectedGain: number;
+  };
+  follow: { points: number; transfers: TrackMove[]; captain: number; hits: number };
+  windowGws: number;
+}
+
+export interface TrackResponse {
+  ready: boolean;
+  message?: string;
+  fromGw: number;
+  toGw: number;
+  summary: {
+    yourPoints: number;
+    followPoints: number;
+    followDiff: number;
+    captainDelta: number;
+    captainWeeks: number;
+    appMovesRealised: number;
+    yourMovesRealised: number;
+  };
+  weeks: TrackWeek[];
+  accuracy: {
+    n: number;
+    modelCorrelation: number;
+    formCorrelation: number;
+    modelMae: number;
+    formMae: number;
+    buckets: Array<{ label: string; projected: number; actual: number; n: number }>;
+  };
+  players: Record<number, { name: string; pos: 'GK' | 'DEF' | 'MID' | 'FWD'; teamName: string }>;
+  notes: string[];
 }
 
 export interface PlayersResponse {
@@ -183,9 +266,13 @@ export function fetchRecommend(teamId: number, ft?: number): Promise<RecommendBu
 
 export function fetchDeadlineRecommend(
   teamId: number,
-  draft: DeadlineDraft
+  draft: DeadlineDraft & { allowHits?: boolean }
 ): Promise<RecommendBundle> {
   return post(`/recommend/${teamId}`, draft);
+}
+
+export function fetchTrack(teamId: number): Promise<TrackResponse> {
+  return get(`/track/${teamId}`);
 }
 
 export function fetchOptimize(opts: {

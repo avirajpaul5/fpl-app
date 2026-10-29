@@ -13,29 +13,29 @@ const CHIP_META = {
   wildcard: {
     label: 'Wildcard',
     icon: '🃏',
-    description: 'Replace your entire squad for free. Guardrail: only recommends after GW9 with a 3-GW sustained drift ≥ 8 projected xP above the optimal rebuild.',
-    guardrail: 'Un-guarded Wildcard timing can lose 66 pts/season. Guarded never dropped below +5 in backtesting, averaging +32 vs +23.',
-    guardrailTooltip: 'An early Wildcard is irreversible, while one or two gameweeks are noisy. The app starts considering it from GW9, then recommends it only when your squad remains at least 8 projected points behind an optimal rebuild for three consecutive gameweeks.',
+    description: 'Rebuild your whole squad for free. The app builds the best squad your budget allows and compares it with what your free transfers can achieve over the next 8 GWs.',
+    guardrail: 'Recommended only when the rebuild beats your free transfers by 15+ projected points — or when a first-half Wildcard is about to expire unused.',
+    guardrailTooltip: 'A Wildcard is irreversible and projections are noisy, so the bar is deliberately high. The first-half Wildcard expires after GW19.',
   },
   freeHit: {
     label: 'Free Hit',
     icon: '🎯',
-    description: 'One-week wildcard (squad reverts after). This is a rescue chip — fires only when ≥3 of your players have no fixture. In a blank-free season it has little value.',
-    guardrail: 'Fires only on genuine blank gameweeks (≥3 blanking owned players). Otherwise held for the largest double gameweek.',
+    description: 'A one-week squad that reverts afterwards. The app builds the best one-week team for each upcoming GW and compares it with your own XI.',
+    guardrail: 'Recommended only when a week gains 12+ projected points — in practice a blank or double gameweek.',
     guardrailTooltip: null,
   },
   benchBoost: {
     label: 'Bench Boost',
     icon: '📈',
-    description: 'All 15 players score this week. Best when your bench projects well; prefers weeks with ≥4 double-gameweek players for a +6 bonus.',
-    guardrail: null,
+    description: 'All 15 players score. The app projects your bench for every upcoming GW and points to the strongest week.',
+    guardrail: 'Play-now only when this week is the best in sight and your bench projects 12+ points (usually a double gameweek).',
     guardrailTooltip: null,
   },
   tripleCaptain: {
     label: 'Triple Captain',
     icon: '©',
-    description: 'Your captain scores triple. Confidence is intentionally LOW — single-week hauls are largely unpredictable. The app suggests a sensible DGW window, not a guarantee.',
-    guardrail: '⚠ Do not treat this as a precise recommendation. Timing has a low ceiling — use this as a nudge toward a DGW, not a certainty.',
+    description: 'Your captain scores triple. The app finds the week your best captain projects highest.',
+    guardrail: 'Play-now only when this week is the best in sight and the captain projects 9+ points. Single-week hauls are volatile — treat it as a nudge.',
     guardrailTooltip: null,
   },
 } as const;
@@ -84,7 +84,7 @@ export function Chips() {
       <div>
         <h1 className="text-xl font-bold tracking-tight">Chip Strategy</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          All timings are guarded to optimise the <em>floor</em>, not the ceiling — eliminating catastrophic mistiming.
+          Chips are scored on your squad's projections for the coming weeks. Chips you've already used in this half of the season (they refresh at GW20) are shown as unavailable.
         </p>
       </div>
 
@@ -127,7 +127,7 @@ export function Chips() {
                         </>
                       ) : (
                         <AlertTitle className="flex items-center gap-1.5">
-                          <span>Hold — guardrail active</span>
+                          <span>{chip.reason.startsWith('Not available') ? 'Not available' : 'Hold'}</span>
                           {meta.guardrailTooltip ? (
                             <Tooltip>
                               <TooltipTrigger

@@ -1,16 +1,27 @@
 export const ENGINE_CONFIG = {
   // ---- Prediction ----
-  // Primary signal for the NEXT gameweek = FPL's own ep_next. Used as-is.
-  // For gameweeks beyond next (GW+1..GW+4 in the horizon), see projection.ts
+  // Every gameweek is projected by the expected-points model in model.ts.
 
-  // ---- Transfer planner (validated: 5-GW horizon, hits when justified) ----
+  // ---- Transfer planner (tuned by season simulation, see engine/backtest) ----
   TRANSFER_HORIZON_GW: 5,
+  // Weight of GW+k is HORIZON_DISCOUNT^k: later projections are less certain.
+  HORIZON_DISCOUNT: 0.85,
+  // Bench points only count through auto-subs.
+  BENCH_WEIGHT: 0.1,
   HIT_COST_PTS: 4,
-  FREE_TRANSFER_MIN_GAIN: 0.0,
-  HIT_MIN_GAIN: 4.0,
+  // Projected gains are optimistic (the best of many noisy candidates), so
+  // decisions use only this share of them.
+  GAIN_SHRINK: 0.75,
+  // Gains are trusted less in the first weeks of a season (see earlySeasonTrust).
+  EARLY_SEASON_GWS: 8,
+  // Option value of keeping a free transfer for later weeks.
+  FREE_TRANSFER_VALUE: 1.5,
+  // Minimum score (after shrink, hits and FT value) before acting at all.
+  MIN_ACTION_SCORE: 0.5,
+  MAX_FREE_TRANSFERS: 5,
+  MAX_MOVES_PER_GW: 4,
 
-  // ---- Captain (validated: just pick highest projected xP) ----
-  // capPick = argmax(projectedXp). Premium-bias heuristic was tested, added nothing.
+  // ---- Captain: highest next-GW projection ----
 
   // ---- Squad legality ----
   BUDGET: 100.0,
@@ -18,22 +29,23 @@ export const ENGINE_CONFIG = {
   SQUAD_QUOTA: { GK: 2, DEF: 5, MID: 5, FWD: 3 } as Record<string, number>,
   MAX_PER_CLUB: 3,
   FORMATION: { GK: 1, DEF: [3, 5], MID: [2, 5], FWD: [1, 3] },
-  MIN_RESERVE_PER_SLOT: 4.0,
 
-  // ---- Chip guardrails (validated: optimize the FLOOR, not the ceiling) ----
+  // ---- Chip guardrails: recommend "play now" only when this week is the best
+  // in sight AND the projected value clears a conservative bar.
   WILDCARD: {
-    MIN_GW: 9,
-    DRIFT_WINDOW_GW: 3,
-    MIN_SUSTAINED_DRIFT: 8.0,
+    // Discounted points over 8 GWs beyond what free transfers achieve.
+    MIN_GAIN: 15,
   },
   FREE_HIT: {
-    BLANK_OWNED_THRESHOLD: 3,
+    // One-week points over your own best XI.
+    MIN_GAIN: 12,
   },
   BENCH_BOOST: {
-    DGW_PREFER_COUNT: 4,
-    DGW_BONUS_WEIGHT: 6.0,
+    MIN_BENCH_PTS: 12,
   },
   TRIPLE_CAPTAIN: {
-    DGW_BONUS_WEIGHT: 4.0,
+    MIN_CAPTAIN_PTS: 9,
   },
+  // FPL chips refresh at GW20; first-half chips expire after GW19.
+  CHIP_WINDOW_ENDS: [19, 38],
 } as const;

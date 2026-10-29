@@ -1,3 +1,5 @@
+import type { PointsBreakdown } from './model.js';
+
 export type Pos = 'GK' | 'DEF' | 'MID' | 'FWD';
 
 export interface UpcomingFixture {
@@ -16,7 +18,7 @@ export interface Player {
   team: number;
   teamName: string;
   price: number; // £m
-  epNext: number; // FPL expected pts next GW (primary signal)
+  epNext: number; // FPL's own ep_next (equals FPL form); display only
   ppg: number; // season points per game
   form: number; // FPL form
   expectedGoals: number; // cumulative season xG from the public FPL feed
@@ -25,33 +27,49 @@ export interface Player {
   ownership: number; // %
   status: string; // a/d/i/s/u
   chanceNext: number | null;
+  news?: string;
   totalPoints: number;
   upcoming: UpcomingFixture[];
 }
 
 export interface ProjectedPlayer extends Player {
-  projByGw: number[]; // projectedXp for [GW, GW+1, ... GW+H-1]
+  projByGw: number[]; // expected points for [GW, GW+1, ... GW+H-1]
   projHorizon: number; // sum of projByGw
+  xMins?: number; // expected minutes next GW
+  pStart?: number; // probability of starting next GW
+  breakdown?: PointsBreakdown; // next-GW expected points by scoring component
 }
 
 export interface Squad {
-  players: Player[];
+  players: ProjectedPlayer[];
 }
 
 export interface XI {
-  starters: Player[];
-  bench: Player[];
-  captain: Player;
-  viceCaptain: Player;
+  starters: ProjectedPlayer[];
+  bench: ProjectedPlayer[];
+  captain: ProjectedPlayer;
+  viceCaptain: ProjectedPlayer;
 }
 
 export interface TransferMove {
-  out: Player;
-  in: Player;
+  out: ProjectedPlayer;
+  in: ProjectedPlayer;
   outSellingPrice: number;
-  gain: number; // projected 5-GW gain
+  gain: number; // projected squad-points gain over the horizon attributed to this move
   tookHit: boolean;
   netGain: number; // gain - (tookHit ? 4 : 0)
+}
+
+/** One way to play the week: roll, or make n transfers. */
+export interface TransferOption {
+  transfers: number;
+  hits: number;
+  moves: TransferMove[];
+  /** Projected squad points gained over the horizon (before hits). */
+  gain: number;
+  /** gain − hit cost − value of the free transfers spent. */
+  score: number;
+  bankAfter: number;
 }
 
 export interface TransferPlan {
@@ -59,6 +77,13 @@ export interface TransferPlan {
   hitsTaken: number;
   projNetGain: number;
   recommendation: 'bank' | 'transfer' | 'hit';
+  /** Plain-English explanation of the decision. */
+  reason: string;
+  /** Best plan for each transfer count, so the user can compare. */
+  options: TransferOption[];
+  freeTransfers: number;
+  /** Free transfers carried into next GW if this plan is followed. */
+  freeTransfersNext: number;
 }
 
 export interface ChipAdvice {
@@ -81,9 +106,9 @@ export type ChipKey = keyof ChipStatus;
 export type ChipAvailability = Record<ChipKey, number>;
 
 export interface CaptainPick {
-  captain: Player;
-  viceCaptain: Player;
-  topThree: Array<{ player: Player; projXp: number }>;
+  captain: ProjectedPlayer;
+  viceCaptain: ProjectedPlayer;
+  topThree: Array<{ player: ProjectedPlayer; projXp: number }>;
 }
 
 export interface RecommendationBundle {

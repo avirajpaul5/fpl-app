@@ -1,15 +1,49 @@
 # FPL Assistant
 
-A Fantasy Premier League planning app that turns live FPL data into squad, transfer, captain, and chip recommendations.
+A Fantasy Premier League planning app that turns live FPL data into a weekly plan: transfers, lineup, captain and chips — plus a track record showing how its advice would have played out for your own team this season.
 
 ## Features
 
-- View a manager's current squad and gameweek status
-- Compare players using projected points, form, price, and ownership
-- Generate transfer recommendations within FPL budget and squad rules
-- Pick an optimized starting XI, captain, and vice-captain
-- Evaluate wildcard, free hit, bench boost, and triple captain opportunities
-- Build an optimized 15-player squad with locked and excluded players
+- **This week's plan** — roll, use free transfers or take a hit, with each option compared side by side and a one-click "apply to my draft"
+- Free transfers, bank, selling prices and chip availability detected from your FPL history
+- Best starting XI and captain for the squad *after* the recommended transfers, with a per-player breakdown of expected points
+- **Track record** — the season replayed week by week: following the app vs your actual points, its suggestions on your real squad vs your own moves, and projection accuracy vs FPL's own expected points
+- Chip timing for Wildcard, Free Hit, Bench Boost and Triple Captain
+- Player explorer and a squad builder with locked and excluded players
+
+## How recommendations are made
+
+**Projections** (`engine/src/model.ts`) build every player's expected points from FPL's scoring rules: playing time, goals and assists (xG/xA), clean sheets and goals conceded (team xG for/against, adjusted for the opponent and home advantage), saves, bonus, defensive contributions and cards. Each rate is estimated from this season with recency weighting, shrunk towards last season's numbers and a price/position prior, and scaled by expected minutes. Injury news ("Expected back 07 Nov") is mapped to the right gameweek. Double gameweeks add fixtures; blanks score zero.
+
+**Transfers** (`engine/src/transfers.ts`, `squad.ts`) value a squad the way FPL scores it — the best legal XI each week, the captain counted twice, the bench lightly — over the next five gameweeks. The planner finds the best plan for each number of transfers (including paired moves where one sale funds an upgrade) and picks between rolling, using free transfers or taking hits by weighing the projected gain against the value of a saved transfer and the hit cost. Gains are discounted because the top-rated move is usually optimistic, and more so in the first weeks of a season.
+
+## How accurate is it?
+
+All numbers are out-of-sample: every gameweek is projected using only data available before its deadline (`engine/backtest`).
+
+| Next-GW projections vs actual points | 2023-24 | 2024-25 | 2025-26 | 2026-27 (GW2–8) |
+| --- | --- | --- | --- | --- |
+| Correlation — this model | **0.44** | **0.45** | **0.40** | **0.41** |
+| Correlation — FPL's expected points | 0.29 | 0.31 | 0.27 | 0.28 |
+| RMSE — this model / FPL | 2.66 / 3.04 | 2.55 / 2.90 | 2.70 / 3.08 | 2.68 / 3.24 |
+
+Season simulations (10 managers per season from varied GW1 squads, following the advice every week, no chips):
+
+| Points, GW2 to season end | 2023-24 | 2024-25 | 2025-26 | 2026-27 (GW2–8) |
+| --- | --- | --- | --- | --- |
+| This engine | **2,278** | **2,318** | **2,041** | **393** |
+| Previous engine (FPL ep + PPG/form blend) | 1,759 | 1,827 | 1,727 | 331 |
+
+FPL's live `ep_next` is exactly its 30-day `form` figure. Public datasets archive an `xP` column, but it is recorded *after* each gameweek and correlates 0.998 with form including that week's points — it leaks the result, so it must not be used to validate projections. The previous engine's backtest relied on it.
+
+Re-run the backtests (downloads public historical data on first run):
+
+```bash
+npm run backtest:accuracy --workspace=engine
+npm run backtest:simulate --workspace=engine -- 2024-25 --managers 10
+```
+
+Last season's per-player totals used as the early-season prior live in `server/src/priorData.ts`; regenerate them each summer with `npx tsx server/scripts/build-prior.ts <season>`.
 
 ## Project structure
 
@@ -57,16 +91,17 @@ Import the repository in Vercel with the project root left at the repository roo
 ```bash
 npm run dev    # Start the client and server in development mode
 npm run build  # Build the engine, server, and client
-npm test       # Run the engine test suite
+npm test       # Run the engine and server test suites
 ```
 
 ## API overview
 
 - `GET /api/health` — API, gameweek, and cache status
 - `GET /api/players` — projected player data with filtering and sorting
-- `GET /api/team/:teamId` — a manager's published squad and season summary
-- `GET /api/recommend/:teamId` — lineup, captain, transfer, and chip advice
-- `POST /api/recommend/:teamId` — recommendations using an edited deadline squad
+- `GET /api/team/:teamId` — a manager's squad, bank, selling prices, free transfers and chips
+- `GET /api/recommend/:teamId` — transfer plan, lineup, captain and chip advice
+- `POST /api/recommend/:teamId` — the same for an edited deadline draft (`allowHits` optional)
+- `GET /api/track/:teamId` — the season replayed with the engine's advice
 - `POST /api/optimize` — generate a squad within the supplied constraints
 
 ## Notes
