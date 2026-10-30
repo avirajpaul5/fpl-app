@@ -80,6 +80,8 @@ export class Season {
   readonly maxGw: number;
   readonly rules: ScoringRules;
   prior = new Map<number, SeasonPrior>();
+  /** First and last kickoff of each GW (ms). */
+  readonly kickoffs = new Map<number, { first: number; last: number }>();
 
   constructor(readonly name: string, rows: Record<string, string>[], raw: Record<string, string>[], fixtureRows: Record<string, string>[]) {
     this.rules = name >= '2025-26' ? DEFAULT_RULES : PRE_2025_RULES;
@@ -88,6 +90,13 @@ export class Season {
     this.fixtures = fixtureRows
       .filter((f) => f['event'] && f['event'] !== 'None')
       .map((f) => ({ id: Number(f['id']), gw: Number(f['event']), home: Number(f['team_h']), away: Number(f['team_a']) }));
+    for (const f of fixtureRows) {
+      const gw = Number(f['event']);
+      const t = Date.parse(f['kickoff_time'] ?? '');
+      if (!gw || !Number.isFinite(t)) continue;
+      const k = this.kickoffs.get(gw) ?? { first: t, last: t };
+      this.kickoffs.set(gw, { first: Math.min(k.first, t), last: Math.max(k.last, t) });
+    }
     let maxGw = 0;
     for (const r of rows) {
       const id = Number(r['element']);
@@ -132,8 +141,23 @@ export class Season {
     return undefined;
   }
 
+  /** FPL deadlines fall 90 minutes before a gameweek's first kickoff. */
+  deadline(gw: number): number {
+    return (this.kickoffs.get(gw)?.first ?? Infinity) - 90 * 60 * 1000;
+  }
+
+  /** Gameweeks whose every match was over before the `gw` deadline. */
+  knownBefore(gw: number): Set<number> {
+    const known = new Set<number>();
+    for (const [h, k] of this.kickoffs) {
+      if (h < gw && k.last + 2.5 * 60 * 60 * 1000 <= this.deadline(gw)) known.add(h);
+    }
+    return known;
+  }
+
   /** Model inputs as they stood at the GW deadline (no injury news is archived). */
   modelPlayers(gw: number): ModelPlayer[] {
+    const known = this.knownBefore(gw);
     const out: ModelPlayer[] = [];
     for (const p of this.players.values()) {
       const at = this.rowAt(p, gw);
@@ -143,7 +167,7 @@ export class Season {
         pos: p.pos,
         team: at.team,
         price: at.price,
-        history: [...p.weeks.values()].filter((w) => w.gw < gw),
+        history: [...p.weeks.values()].filter((w) => known.has(w.gw)),
         prior: this.prior.get(p.code),
       });
     }

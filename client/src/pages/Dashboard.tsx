@@ -1,24 +1,23 @@
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Clock, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/store/index.ts';
 import { fetchDeadlineRecommend, fetchPlayers, fetchTeam, fetchTrack, type TransferMove } from '@/api/index.ts';
 import { Button } from '@/components/ui/button.tsx';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.tsx';
+import {
+  Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
+} from '@/components/ui/card.tsx';
 import { Badge } from '@/components/ui/badge.tsx';
-import { Separator } from '@/components/ui/separator.tsx';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
-import { TooltipProvider } from '@/components/ui/tooltip.tsx';
-import { PosBadge } from '@/components/PosBadge.tsx';
-import { XpBar } from '@/components/XpBar.tsx';
-import { ConfidencePill } from '@/components/ConfidencePill.tsx';
-import { StatusDot } from '@/components/StatusDot.tsx';
+import { Progress } from '@/components/ui/progress.tsx';
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.tsx';
 import { TeamIdInput } from '@/components/TeamIdInput.tsx';
 import { DeadlineSetup } from '@/components/DeadlineSetup.tsx';
 import { PlanCard } from '@/components/PlanCard.tsx';
 import { XpBreakdown } from '@/components/XpBreakdown.tsx';
 import { DeadlineSetupSkeleton, RecommendationSkeleton } from '@/components/LoadingSkeletons.tsx';
-import { formatDeadline, signed, timeUntil } from '@/lib/format.ts';
+import { availability, confidenceVariant, formatDeadline, signed, timeUntil } from '@/lib/format.ts';
 
 const CHIPS = [
   { key: 'wildcard', label: 'Wildcard' },
@@ -26,6 +25,15 @@ const CHIPS = [
   { key: 'benchBoost', label: 'Bench Boost' },
   { key: 'tripleCaptain', label: 'Triple Captain' },
 ] as const;
+
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
 
 export function Dashboard() {
   const {
@@ -42,6 +50,7 @@ export function Dashboard() {
     applyTransfers,
   } = useAppStore();
   const qc = useQueryClient();
+  const now = useNow(30_000);
 
   const team = useQuery({
     queryKey: ['team', teamId],
@@ -80,6 +89,22 @@ export function Dashboard() {
     staleTime: 5 * 60_000,
   });
 
+  // Advice is only meaningful before the deadline: once it passes, drop the
+  // locked week's plan and fetch the next gameweek's.
+  const deadline = recommend.data?.deadline ?? team.data?.deadline ?? null;
+  const deadlineMs = deadline ? Date.parse(deadline) : null;
+  const locked = deadlineMs != null && now >= deadlineMs;
+  useEffect(() => {
+    if (deadlineMs == null) return;
+    const wait = deadlineMs - Date.now() + 2_000;
+    if (wait <= 0) {
+      void qc.invalidateQueries();
+      return;
+    }
+    const timer = setTimeout(() => void qc.invalidateQueries(), Math.min(wait, 2_000_000_000));
+    return () => clearTimeout(timer);
+  }, [deadlineMs, qc]);
+
   function handleApply(moves: TransferMove[]) {
     applyTransfers(moves.map((m) => ({
       outId: m.out.id,
@@ -92,17 +117,15 @@ export function Dashboard() {
   if (!teamId) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20">
-        <Card className="mx-auto max-w-lg text-center">
+        <Card className="mx-auto max-w-lg">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold tracking-tight">Your weekly FPL plan</CardTitle>
-            <CardDescription className="leading-relaxed">
+            <CardTitle className="text-2xl">Your weekly FPL plan</CardTitle>
+            <CardDescription>
               Enter your FPL team ID for this week’s transfers, captain and lineup — plus a season track record showing how the advice would have played out for your team.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-center">
-              <TeamIdInput />
-            </div>
+          <CardContent className="space-y-3">
+            <TeamIdInput />
             <p className="text-xs text-muted-foreground">
               Your team ID is in the FPL URL: fantasy.premierleague.com/entry/<strong>XXXXXX</strong>/event/…
             </p>
@@ -112,189 +135,204 @@ export function Dashboard() {
     );
   }
 
-  const data = recommend.data;
-  const deadline = data?.deadline ?? team.data?.deadline ?? null;
+  const data = locked ? undefined : recommend.data;
   const summary = track.data?.ready ? track.data.summary : null;
+  const resultsThroughGw = data?.resultsThroughGw ?? team.data?.resultsThroughGw;
 
   return (
-    <TooltipProvider>
-      <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              {team.data && (
-                <Badge variant="secondary" className="px-3 py-1 text-sm font-semibold">GW{team.data.gw}</Badge>
-              )}
-              {team.data?.manager.teamName && (
-                <span className="text-lg font-semibold tracking-tight">{team.data.manager.teamName}</span>
-              )}
-            </div>
-            {deadline && (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock className="size-3.5" />
-                Deadline {formatDeadline(deadline)} · {timeUntil(deadline)}
-              </p>
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {team.data && <Badge>GW{team.data.gw}</Badge>}
+            {team.data?.manager.teamName && (
+              <h1 className="text-lg font-semibold tracking-tight">{team.data.manager.teamName}</h1>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <TeamIdInput />
-            <Button variant="outline" size="sm" onClick={() => qc.invalidateQueries()} className="h-8 gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
-            </Button>
-          </div>
+          {deadline && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="size-3.5" />
+              Deadline {formatDeadline(deadline)} · {timeUntil(deadline, now)}
+              {resultsThroughGw ? ` · uses results up to GW${resultsThroughGw}` : ''}
+            </p>
+          )}
         </div>
-
-        {team.isError && (
-          <Alert variant="destructive"><AlertTitle>Could not load your team</AlertTitle><AlertDescription>{team.error?.message ?? 'Failed to load team'}</AlertDescription></Alert>
-        )}
-
-        {/* Track record teaser */}
-        {summary && track.data && (
-          <Link to="/track" className="block">
-            <Card size="sm" className="flex-row flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/30">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Track record · GW{track.data.fromGw}–{track.data.toGw}
-              </span>
-              <span className="text-sm">
-                Following the app: <strong className="tabular-nums">{summary.followPoints}</strong> pts vs your <strong className="tabular-nums">{summary.yourPoints}</strong>{' '}
-                <span className={summary.followDiff >= 0 ? 'text-primary' : 'text-destructive'}>({signed(summary.followDiff, 0)})</span>
-              </span>
-              <span className="text-sm text-muted-foreground">
-                Suggested moves <span className="tabular-nums text-foreground">{signed(summary.appMovesRealised, 0)}</span> vs yours <span className="tabular-nums text-foreground">{signed(summary.yourMovesRealised, 0)}</span>
-              </span>
-              <span className="ml-auto flex items-center gap-1 text-xs text-primary">Details <ArrowRight className="size-3.5" /></span>
-            </Card>
-          </Link>
-        )}
-
-        {(team.isLoading || players.isLoading || recommend.isLoading || (team.data && !draftReady)) && <RecommendationSkeleton />}
-        {recommend.isError && (
-          <Alert variant="destructive"><AlertTitle>Could not load recommendations</AlertTitle><AlertDescription>{recommend.error?.message ?? 'Failed to load'}</AlertDescription></Alert>
-        )}
-
-        {data && (
-          <>
-            <PlanCard
-              gw={data.gw}
-              plan={data.transfers}
-              allowHits={allowHits}
-              onAllowHitsChange={setAllowHits}
-              onApply={handleApply}
-            />
-
-            {/* Captain */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Captain</CardTitle>
-                <CardDescription>Highest expected points in your lineup{data.transfers.moves.length > 0 ? ' after the transfers above' : ''}. Hover a score for its breakdown.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {data.captain.topThree.map((item, i) => (
-                    <Card key={item.player.id} size="sm" className={`p-4 ${i === 0 ? 'bg-primary/5 ring-primary/50' : 'bg-muted/30'}`}>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            {i === 0 && <Badge className="text-[10px]">C</Badge>}
-                            {i === 1 && <Badge variant="outline" className="text-[10px]">VC</Badge>}
-                            <span className="text-sm font-semibold">{item.player.name}</span>
-                            <StatusDot status={item.player.status} chanceNext={item.player.chanceNext} />
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <PosBadge pos={item.player.pos} />
-                            <span className="text-xs text-muted-foreground">{item.player.teamName}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <XpBreakdown player={item.player} className="cursor-help text-lg font-bold text-primary tabular-nums" />
-                          <div className="text-[10px] text-muted-foreground">xP next GW</div>
-                        </div>
-                      </div>
-                      <XpBar value={item.projXp} max={10} />
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Lineup */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Starting XI</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {data.xi.starters.map((p) => {
-                    const isCap = p.id === data.xi.captain.id;
-                    const isVc = p.id === data.xi.viceCaptain.id && !isCap;
-                    const isNew = data.transfers.moves.some((m) => m.in.id === p.id);
-                    return (
-                      <div key={p.id} className="flex items-center gap-3 rounded-md border-l-2 border-l-white/30 px-3 py-2">
-                        <PosBadge pos={p.pos} />
-                        <span className="flex-1 text-sm font-medium">
-                          {p.name}
-                          {isNew && <Badge variant="outline" className="ml-2 text-[10px] text-primary">new</Badge>}
-                        </span>
-                        {isCap && <Badge className="text-[10px]">C</Badge>}
-                        {isVc && <Badge variant="outline" className="text-[10px] text-muted-foreground">VC</Badge>}
-                        <StatusDot status={p.status} chanceNext={p.chanceNext} />
-                        <span className="hidden text-xs text-muted-foreground sm:inline">{p.teamName}</span>
-                        <span className="hidden w-16 text-right text-xs text-muted-foreground tabular-nums md:inline">{Math.round(p.xMins ?? 0)} min</span>
-                        <span className="w-14 text-right"><XpBreakdown player={p} /></span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Separator className="my-3" />
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Bench order</p>
-                  {data.xi.bench.map((player, index) => (
-                    <div key={player.id} className="flex items-center gap-3 rounded-md bg-muted/25 px-3 py-2">
-                      <span className="w-5 text-xs font-semibold text-muted-foreground">{player.pos === 'GK' ? 'GK' : index + 1}</span>
-                      <PosBadge pos={player.pos} />
-                      <span className="flex-1 text-sm font-medium">{player.name}</span>
-                      <StatusDot status={player.status} chanceNext={player.chanceNext} />
-                      <span className="w-14 text-right"><XpBreakdown player={player} /></span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Chips */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Chips</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {CHIPS.map(({ key, label }) => {
-                    const chip = data.chips[key];
-                    const unavailable = chip.reason.startsWith('Not available');
-                    return (
-                      <Card key={key} size="sm" className={`p-4 ${chip.recommend ? 'bg-primary/5 ring-primary/50' : 'bg-muted/20'} ${unavailable ? 'opacity-60' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">{label}</span>
-                          {!unavailable && <ConfidencePill confidence={chip.confidence} />}
-                        </div>
-                        <div className={chip.recommend ? 'text-xs font-medium text-primary' : 'text-xs text-muted-foreground'}>
-                          {unavailable ? (data.gw < 20 ? 'Used — back at GW20' : 'Used this season') : chip.recommend ? `Play this week (GW${chip.gw})` : chip.gw ? `Hold · best window GW${chip.gw}` : 'Hold'}
-                        </div>
-                        <p className="text-xs leading-relaxed text-muted-foreground">{chip.reason}</p>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {team.data && players.data && <DeadlineSetup team={team.data} allPlayers={players.data.players} />}
-        {(team.isLoading || players.isLoading) && <DeadlineSetupSkeleton />}
+        <div className="flex flex-wrap items-center gap-3">
+          <TeamIdInput />
+          <Button variant="outline" size="sm" onClick={() => qc.invalidateQueries()}>
+            <RefreshCw data-icon="inline-start" />
+            Refresh
+          </Button>
+        </div>
       </div>
-    </TooltipProvider>
+
+      {team.isError && (
+        <Alert variant="destructive"><AlertTitle>Could not load your team</AlertTitle><AlertDescription>{team.error?.message ?? 'Failed to load team'}</AlertDescription></Alert>
+      )}
+
+      {locked && team.data && (
+        <Alert>
+          <Clock />
+          <AlertTitle>The GW{team.data.gw} deadline has passed</AlertTitle>
+          <AlertDescription>Its plan is locked, so it is hidden. Loading advice for the next gameweek…</AlertDescription>
+        </Alert>
+      )}
+
+      {summary && track.data && (
+        <Card size="sm">
+          <CardHeader>
+            <CardDescription>Track record · GW{track.data.fromGw}–{track.data.toGw}</CardDescription>
+            <CardTitle>
+              Following the app: {summary.followPoints} pts vs your {summary.yourPoints} ({signed(summary.followDiff, 0)})
+            </CardTitle>
+            <CardDescription>
+              Its suggested transfers outscored the players they replaced by {signed(summary.appMovesRealised, 0)} pts, vs {signed(summary.yourMovesRealised, 0)} for your own moves.
+            </CardDescription>
+            <CardAction>
+              <Button variant="outline" size="sm" render={<Link to="/track" />} nativeButton={false}>
+                Details
+                <ArrowRight data-icon="inline-end" />
+              </Button>
+            </CardAction>
+          </CardHeader>
+        </Card>
+      )}
+
+      {(team.isLoading || players.isLoading || recommend.isLoading || (team.data && !draftReady)) && <RecommendationSkeleton />}
+      {recommend.isError && (
+        <Alert variant="destructive"><AlertTitle>Could not load recommendations</AlertTitle><AlertDescription>{recommend.error?.message ?? 'Failed to load'}</AlertDescription></Alert>
+      )}
+
+      {data && (
+        <>
+          <PlanCard
+            gw={data.gw}
+            plan={data.transfers}
+            allowHits={allowHits}
+            onAllowHitsChange={setAllowHits}
+            onApply={handleApply}
+          />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Captain</CardTitle>
+              <CardDescription>
+                Highest expected points in your lineup{data.transfers.moves.length > 0 ? ' after the transfers above' : ''}. Hover a score for its breakdown.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-3">
+              {data.captain.topThree.map((item, i) => (
+                <Card key={item.player.id} size="sm">
+                  <CardHeader>
+                    <CardDescription className="flex items-center gap-1.5">
+                      {i === 0 && <Badge>Captain</Badge>}
+                      {i === 1 && <Badge variant="outline">Vice</Badge>}
+                      {item.player.pos} · {item.player.teamName}
+                    </CardDescription>
+                    <CardTitle>{item.player.name}</CardTitle>
+                    <CardAction>
+                      <XpBreakdown player={item.player} className="px-0 text-lg tabular-nums" />
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent>
+                    <Progress value={Math.min(100, (item.projXp / 10) * 100)} aria-label="Expected points" />
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Starting XI</CardTitle>
+              <CardDescription>Best lineup for GW{data.gw}; expected minutes account for rotation and injury risk.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-14">Pos</TableHead>
+                    <TableHead>Player</TableHead>
+                    <TableHead className="hidden sm:table-cell">Club</TableHead>
+                    <TableHead className="hidden text-right md:table-cell">Minutes</TableHead>
+                    <TableHead className="text-right">xP</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.xi.starters.map((p) => {
+                    const flag = availability(p);
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell><Badge variant="secondary">{p.pos}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-medium">{p.name}</span>
+                            {p.id === data.xi.captain.id && <Badge>C</Badge>}
+                            {p.id === data.xi.viceCaptain.id && <Badge variant="outline">V</Badge>}
+                            {data.transfers.moves.some((m) => m.in.id === p.id) && <Badge variant="outline">New</Badge>}
+                            {flag && <Badge variant={flag.variant}>{flag.label}</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground sm:table-cell">{p.teamName}</TableCell>
+                        <TableCell className="hidden text-right tabular-nums text-muted-foreground md:table-cell">{Math.round(p.xMins ?? 0)}</TableCell>
+                        <TableCell className="text-right"><XpBreakdown player={p} /></TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <Table>
+                <TableCaption>Bench order — the reserve goalkeeper sits last.</TableCaption>
+                <TableBody>
+                  {data.xi.bench.map((p, index) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="w-14 text-muted-foreground">{p.pos === 'GK' ? 'GK' : index + 1}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary">{p.pos}</Badge>
+                          <span>{p.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right"><XpBreakdown player={p} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Chips</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {CHIPS.map(({ key, label }) => {
+                const chip = data.chips[key];
+                const unavailable = chip.reason.startsWith('Not available');
+                const status = unavailable
+                  ? (data.gw < 20 ? 'Used — back at GW20' : 'Used this season')
+                  : chip.recommend ? `Play this week (GW${chip.gw})` : chip.gw ? `Hold · best window GW${chip.gw}` : 'Hold';
+                return (
+                  <Card key={key} size="sm" className={unavailable ? 'opacity-60' : undefined}>
+                    <CardHeader>
+                      <CardTitle>{label}</CardTitle>
+                      <CardDescription>{status}</CardDescription>
+                      {!unavailable && (
+                        <CardAction><Badge variant={confidenceVariant(chip.confidence)}>{chip.confidence}</Badge></CardAction>
+                      )}
+                    </CardHeader>
+                    <CardContent className="text-xs text-muted-foreground">{chip.reason}</CardContent>
+                  </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {team.data && players.data && <DeadlineSetup team={team.data} allPlayers={players.data.players} />}
+      {(team.isLoading || players.isLoading) && <DeadlineSetupSkeleton />}
+    </div>
   );
 }

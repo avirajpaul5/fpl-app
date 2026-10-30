@@ -47,3 +47,23 @@ export function breakdownRows(b: PointsBreakdown | undefined): Array<{ label: st
     .filter((row) => Math.abs(row.value) >= 0.05)
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 }
+
+type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
+
+/** Availability flag for a player, or null when fully available. */
+export function availability(p: { status: string; chanceNext?: number | null }): { label: string; variant: BadgeVariant } | null {
+  if (p.status === 'a') return null;
+  if (p.status === 'd') return { label: p.chanceNext != null ? `${p.chanceNext}% chance` : 'Doubtful', variant: 'outline' };
+  if (p.status === 'i') return { label: 'Injured', variant: 'destructive' };
+  if (p.status === 's') return { label: 'Suspended', variant: 'destructive' };
+  return { label: 'Unavailable', variant: 'destructive' };
+}
+
+export function confidenceVariant(confidence: 'high' | 'medium' | 'low'): BadgeVariant {
+  return confidence === 'high' ? 'default' : confidence === 'medium' ? 'secondary' : 'outline';
+}
+
+/** Fixture difficulty as a badge: easy fixtures light, hard fixtures solid. */
+export function fdrVariant(fdr: number): BadgeVariant {
+  return fdr <= 2 ? 'outline' : fdr === 3 ? 'secondary' : 'default';
+}

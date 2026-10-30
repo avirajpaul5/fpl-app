@@ -15,11 +15,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
 import { Badge } from '@/components/ui/badge.tsx';
 import { Checkbox } from '@/components/ui/checkbox.tsx';
 import { Label } from '@/components/ui/label.tsx';
-import { PosBadge } from '@/components/PosBadge.tsx';
-import { StatusDot } from '@/components/StatusDot.tsx';
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious,
+} from '@/components/ui/pagination.tsx';
+import { availability } from '@/lib/format.ts';
 import { PlayerTableSkeleton } from '@/components/LoadingSkeletons.tsx';
 import { XpBreakdown } from '@/components/XpBreakdown.tsx';
-import { TooltipProvider } from '@/components/ui/tooltip.tsx';
 
 type SortKey = 'epNext' | 'projHorizon' | 'price' | 'ownership' | 'ppg' | 'totalPoints';
 type SortDir = 'asc' | 'desc';
@@ -28,6 +29,15 @@ type PosFilter = 'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD';
 interface CompareSlot { player: Player; role: 'out' | 'in'; }
 
 const PAGE_SIZE = 25;
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'epNext', label: 'Next GW xP' },
+  { value: 'projHorizon', label: '5-GW horizon' },
+  { value: 'price', label: 'Price' },
+  { value: 'ownership', label: 'Ownership' },
+  { value: 'ppg', label: 'PPG' },
+  { value: 'totalPoints', label: 'Total points' },
+];
 
 function nextGwXp(player: Player): number {
   return player.projByGw[0] ?? player.epNext;
@@ -120,7 +130,6 @@ export function Transfers() {
   }
 
   return (
-    <TooltipProvider>
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
       <div>
         <h1 className="text-xl font-bold tracking-tight">Players</h1>
@@ -132,12 +141,10 @@ export function Transfers() {
       {/* Compare tray */}
       {(outP || inP) && (
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Compare
-              </CardTitle>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setCompare([])}>
+              <CardTitle>Compare</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setCompare([])}>
                 Clear
               </Button>
             </div>
@@ -151,16 +158,16 @@ export function Transfers() {
             )}
             <div className="grid grid-cols-2 gap-6">
               {([ { role: 'out' as const, label: 'OUT', player: outP, accent: 'text-muted-foreground' },
-                  { role: 'in'  as const, label: 'IN',  player: inP,  accent: 'text-primary' } ]
+                  { role: 'in'  as const, label: 'IN',  player: inP,  accent: 'text-foreground' } ]
               ).map(({ role, label, player, accent }) => (
                 <div key={role}>
                   <p className={`text-xs font-semibold ${accent} mb-2`}>{label}</p>
                   {player ? (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <PosBadge pos={player.pos} />
+                        <Badge variant="secondary">{player.pos}</Badge>
                         <span className="font-semibold text-sm">{player.name}</span>
-                        <StatusDot status={player.status} chanceNext={player.chanceNext} />
+                        {availability(player) && <Badge variant={availability(player)!.variant}>{availability(player)!.label}</Badge>}
                         <span className="text-xs text-muted-foreground">{player.teamName} · £{player.price.toFixed(1)}m</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -171,18 +178,18 @@ export function Transfers() {
                           { label: 'Owned by',      value: `${player.ownership.toFixed(1)}%`, hi: false },
                         ].map(({ label: l, value: v, hi }) => (
                           <Card key={l} size="sm" className="gap-0 bg-muted/40 p-2.5">
-                            <p className="text-[10px] text-muted-foreground">{l}</p>
-                            <p className={`font-semibold text-sm tabular-nums ${hi ? 'text-primary' : ''}`}>{v}</p>
+                            <p className="text-xs text-muted-foreground">{l}</p>
+                            <p className={`font-semibold text-sm tabular-nums ${hi ? 'text-foreground' : 'text-muted-foreground'}`}>{v}</p>
                           </Card>
                         ))}
                       </div>
                       {/* GW-by-GW projection */}
                       <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">GW-by-GW projection</p>
+                        <p className="text-xs text-muted-foreground mb-1">GW-by-GW projection</p>
                         <div className="flex gap-1">
                           {player.projByGw.map((xp, k) => (
                             <div key={k} className="flex-1 text-center">
-                              <p className="text-[10px] text-muted-foreground/60">+{k}</p>
+                              <p className="text-xs text-muted-foreground">+{k}</p>
                               <Badge variant={xp > 5 ? 'default' : 'secondary'} className="w-full tabular-nums">
                                 {xp.toFixed(1)}
                               </Badge>
@@ -204,7 +211,7 @@ export function Transfers() {
                 <div className="flex items-center gap-6 text-sm">
                   <div>
                     <span className="text-muted-foreground">5-GW gain: </span>
-                    <span className={`font-semibold tabular-nums ${inP.projHorizon - outP.projHorizon > 0 ? 'text-primary' : 'text-destructive'}`}>
+                    <span className={`font-semibold tabular-nums ${inP.projHorizon - outP.projHorizon > 0 ? '' : 'text-destructive'}`}>
                       {(inP.projHorizon - outP.projHorizon > 0 ? '+' : '')}{(inP.projHorizon - outP.projHorizon).toFixed(1)} xP
                     </span>
                   </div>
@@ -254,17 +261,14 @@ export function Transfers() {
           <Checkbox checked={diffOnly} onCheckedChange={(checked) => { setDiffOnly(checked); setPage(1); }} />
           Differentials
         </Label>
-        <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setSortDir('desc'); setPage(1); }}>
-          <SelectTrigger className="h-8 w-44 text-sm">
+        <Select items={SORT_OPTIONS} value={sort} onValueChange={(v) => { setSort(v as SortKey); setSortDir('desc'); setPage(1); }}>
+          <SelectTrigger className="w-44">
             <SelectValue placeholder="Sort by…" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="epNext">Next GW xP</SelectItem>
-            <SelectItem value="projHorizon">5-GW horizon</SelectItem>
-            <SelectItem value="price">Price</SelectItem>
-            <SelectItem value="ownership">Ownership</SelectItem>
-            <SelectItem value="ppg">PPG</SelectItem>
-            <SelectItem value="totalPoints">Total Points</SelectItem>
+            {SORT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button
@@ -307,17 +311,17 @@ export function Transfers() {
                   <TableRow key={p.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <PosBadge pos={p.pos} />
+                        <Badge variant="secondary">{p.pos}</Badge>
                         <span className="font-medium text-sm">{p.name}</span>
                         {isDiff && (
-                          <Badge variant="outline" className="text-[10px]">Differential</Badge>
+                          <Badge variant="outline">Differential</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">{p.teamName}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums">£{p.price.toFixed(1)}m</TableCell>
                     <TableCell className="text-right">
-                      <XpBreakdown player={p} className="cursor-help text-sm font-semibold text-primary tabular-nums" />
+                      <XpBreakdown player={p} />
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{p.projHorizon.toFixed(1)}</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{Math.round(p.xMins ?? 0)}</TableCell>
@@ -325,7 +329,7 @@ export function Transfers() {
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.ownership.toFixed(1)}%</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm tabular-nums">{p.totalPoints}</TableCell>
                     <TableCell className="text-right">
-                      <StatusDot status={p.status} chanceNext={p.chanceNext} />
+                      {availability(p) && <Badge variant={availability(p)!.variant}>{availability(p)!.label}</Badge>}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -345,27 +349,29 @@ export function Transfers() {
             <div className="text-xs text-muted-foreground">
               Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length} players
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                Previous
-              </Button>
-              <span className="min-w-20 text-center text-xs text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-              >
-                Next
-              </Button>
-            </div>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    aria-disabled={currentPage === 1}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : undefined}
+                    onClick={(e) => { e.preventDefault(); setPage((value) => Math.max(1, value - 1)); }}
+                  />
+                </PaginationItem>
+                <PaginationItem className="px-2 text-xs text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    aria-disabled={currentPage === totalPages}
+                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : undefined}
+                    onClick={(e) => { e.preventDefault(); setPage((value) => Math.min(totalPages, value + 1)); }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </Card>
       )}
@@ -373,6 +379,5 @@ export function Transfers() {
         <Alert><AlertTitle>No players match</AlertTitle><AlertDescription>Try clearing a filter or increasing the maximum price.</AlertDescription></Alert>
       )}
     </div>
-    </TooltipProvider>
   );
 }

@@ -24,7 +24,7 @@ async function recommend(req: Request, res: Response, overrides: RecommendOverri
       return;
     }
 
-    const { gw, players, data } = await getProjectedPlayers();
+    const { gw, players, data, resultsThroughGw } = await getProjectedPlayers();
     const state = await loadManagerState(teamId, data);
     const playerMap = new Map(players.map((player) => [player.id, player]));
     const squadIds = overrides.squadIds ?? state.squadIds;
@@ -73,6 +73,7 @@ async function recommend(req: Request, res: Response, overrides: RecommendOverri
     res.json({
       gw,
       deadline: data.deadlines[gw] ?? null,
+      resultsThroughGw,
       deadlineDraft: { squadIds, bank, freeTransfers, sellingPrices, chipAvailability },
       xi: week.xi,
       captain: pickCaptain(week.xi.starters),

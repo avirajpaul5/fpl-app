@@ -189,8 +189,22 @@ export function normalizePosLabel(label: string): Pos {
 
 // ---- Exported fetch functions ----
 
-export function fetchBootstrap(): Promise<RawBootstrap> {
-  return cached('bootstrap', TTL.bootstrap, () => fplFetch<RawBootstrap>(`${FPL_BASE}/bootstrap-static/`));
+/** The first gameweek whose deadline is still in the future (FPL's own flags can lag). */
+export function upcomingEvent(bootstrap: RawBootstrap, now = Date.now()): RawEvent | undefined {
+  return bootstrap.events
+    .filter((e) => Date.parse(e.deadline_time) > now)
+    .sort((a, b) => Date.parse(a.deadline_time) - Date.parse(b.deadline_time))[0];
+}
+
+export async function fetchBootstrap(): Promise<RawBootstrap> {
+  const hit = cacheGet<RawBootstrap>('bootstrap');
+  if (hit) return hit;
+  const data = await fplFetch<RawBootstrap>(`${FPL_BASE}/bootstrap-static/`);
+  // Never serve a cached copy past the next deadline: the GW being planned changes then.
+  const next = upcomingEvent(data);
+  const untilDeadline = next ? Date.parse(next.deadline_time) - Date.now() : TTL.bootstrap;
+  cacheSet('bootstrap', data, Math.max(5_000, Math.min(TTL.bootstrap, untilDeadline)));
+  return data;
 }
 
 /** Every fixture of the season in one request. */
@@ -305,9 +319,10 @@ export function buildTeamUpcoming(
 /** The next gameweek whose deadline has not passed. */
 export async function getCurrentGw(): Promise<number> {
   const bootstrap = await fetchBootstrap();
-  const currentEvent = bootstrap.events.find((e) => e.is_current);
-  const nextEvent = bootstrap.events.find((e) => e.is_next);
-  return nextEvent?.id ?? currentEvent?.id ?? 1;
+  const upcoming = upcomingEvent(bootstrap);
+  if (upcoming) return upcoming.id;
+  // Season over: stay on the final gameweek.
+  return Math.max(1, ...bootstrap.events.map((e) => e.id));
 }
 
 export async function fetchUserTeam(teamId: number, gw: number) {

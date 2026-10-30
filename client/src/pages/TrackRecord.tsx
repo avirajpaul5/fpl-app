@@ -1,13 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { useAppStore } from '@/store/index.ts';
 import { fetchTrack, type TrackMove, type TrackResponse } from '@/api/index.ts';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
 import { Badge } from '@/components/ui/badge.tsx';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.tsx';
+import {
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
+} from '@/components/ui/card.tsx';
+import {
+  ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig,
+} from '@/components/ui/chart.tsx';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.tsx';
-import { signed } from '@/lib/format.ts';
+import { formatDeadline, signed } from '@/lib/format.ts';
+
+const chartConfig = {
+  projected: { label: 'Projected', color: 'var(--chart-2)' },
+  actual: { label: 'Actual average', color: 'var(--chart-1)' },
+} satisfies ChartConfig;
 
 function Moves({ moves, players }: { moves: TrackMove[]; players: TrackResponse['players'] }) {
   if (moves.length === 0) return <span className="text-muted-foreground">Roll</span>;
@@ -16,7 +26,7 @@ function Moves({ moves, players }: { moves: TrackMove[]; players: TrackResponse[
     <div className="space-y-0.5">
       {moves.map((m) => (
         <div key={`${m.out}-${m.in}`} className="whitespace-nowrap">
-          <span className="text-muted-foreground">{name(m.out)}</span> → <span>{name(m.in)}</span>
+          <span className="text-muted-foreground">{name(m.out)}</span> → {name(m.in)}
         </div>
       ))}
     </div>
@@ -24,18 +34,7 @@ function Moves({ moves, players }: { moves: TrackMove[]; players: TrackResponse[
 }
 
 function Delta({ value }: { value: number }) {
-  const cls = value > 0 ? 'text-primary' : value < 0 ? 'text-destructive' : 'text-muted-foreground';
-  return <span className={`font-semibold tabular-nums ${cls}`}>{signed(value, 0)}</span>;
-}
-
-function Stat({ title, value, sub, tone }: { title: string; value: React.ReactNode; sub: React.ReactNode; tone?: 'good' | 'bad' }) {
-  return (
-    <Card size="sm" className={`gap-1 p-4 ${tone === 'good' ? 'ring-primary/40' : ''}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
-      <div className="text-2xl font-semibold tabular-nums tracking-tight">{value}</div>
-      <p className="text-xs leading-relaxed text-muted-foreground">{sub}</p>
-    </Card>
-  );
+  return <span className={`tabular-nums ${value < 0 ? 'text-destructive' : ''}`}>{signed(value, 0)}</span>;
 }
 
 export function TrackRecord() {
@@ -50,7 +49,7 @@ export function TrackRecord() {
   if (!teamId) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20">
-        <Card className="mx-auto max-w-lg text-center">
+        <Card className="mx-auto max-w-lg">
           <CardHeader>
             <CardTitle>Track record needs your team</CardTitle>
             <CardDescription>Enter your FPL team ID on the This Week page first.</CardDescription>
@@ -61,17 +60,17 @@ export function TrackRecord() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Track record</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          How the app’s advice would have played out for your team this season. Every week is replayed using only the results available before that deadline — the same model that makes this week’s recommendation.
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold tracking-tight">Track record</h1>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          How the app’s advice would have played out for your team this season. Each week is rebuilt from scratch using only matches that had finished before that week’s deadline — the same model that makes this week’s recommendation.
         </p>
       </div>
 
       {isLoading && (
-        <div role="status" aria-label="Replaying your season" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
+        <div role="status" aria-label="Replaying your season" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-36" />)}
         </div>
       )}
       {isError && <Alert variant="destructive"><AlertTitle>Could not build the track record</AlertTitle><AlertDescription>{error?.message}</AlertDescription></Alert>}
@@ -79,44 +78,63 @@ export function TrackRecord() {
 
       {data?.ready && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat
-              title={`Follow the app · GW${data.fromGw}–${data.toGw}`}
-              tone={data.summary.followDiff >= 0 ? 'good' : undefined}
-              value={<>{data.summary.followPoints} <span className="text-base text-muted-foreground">vs {data.summary.yourPoints}</span></>}
-              sub={<>Its transfers, lineup and captain every week (your chips kept) would have scored <Delta value={data.summary.followDiff} /> vs your actual points.</>}
-            />
-            <Stat
-              title="Suggested transfers"
-              tone={data.summary.appMovesRealised >= data.summary.yourMovesRealised ? 'good' : undefined}
-              value={<><Delta value={data.summary.appMovesRealised} /> <span className="text-base text-muted-foreground">vs {signed(data.summary.yourMovesRealised, 0)}</span></>}
-              sub="Points the players it suggested buying outscored the ones they replaced over the next 4 GWs, summed per week — vs the same for your own moves (after hits)."
-            />
-            <Stat
-              title="Captaincy"
-              value={<Delta value={data.summary.captainDelta} />}
-              sub={`Points from captaining its pick instead of yours, using your actual lineup, over ${data.summary.captainWeeks} weeks.`}
-            />
-            <Stat
-              title="Projection accuracy"
-              tone="good"
-              value={<>{data.accuracy.modelCorrelation.toFixed(2)} <span className="text-base text-muted-foreground">vs {data.accuracy.formCorrelation.toFixed(2)}</span></>}
-              sub="Correlation of next-GW projections with actual points this season, vs FPL’s own expected points (which equal player form). Higher is better."
-            />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader>
+                <CardDescription>Follow the app · GW{data.fromGw}–{data.toGw}</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {data.summary.followPoints} <span className="text-base font-normal text-muted-foreground">vs {data.summary.yourPoints}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardFooter className="text-xs text-muted-foreground">
+                <span>Its transfers, lineup and captain each week (your chips kept): <Delta value={data.summary.followDiff} /> vs your actual points.</span>
+              </CardFooter>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Suggested transfers</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  <Delta value={data.summary.appMovesRealised} /> <span className="text-base font-normal text-muted-foreground">vs {signed(data.summary.yourMovesRealised, 0)}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardFooter className="text-xs text-muted-foreground">
+                Points the suggested signings outscored the players they replaced over the next 4 GWs, summed per week — vs your own moves after hits.
+              </CardFooter>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Captaincy</CardDescription>
+                <CardTitle className="text-2xl"><Delta value={data.summary.captainDelta} /></CardTitle>
+              </CardHeader>
+              <CardFooter className="text-xs text-muted-foreground">
+                Points from captaining its pick instead of yours, in your actual lineup, over {data.summary.captainWeeks} weeks.
+              </CardFooter>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Projection accuracy</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  {data.accuracy.modelCorrelation.toFixed(2)} <span className="text-base font-normal text-muted-foreground">vs {data.accuracy.formCorrelation.toFixed(2)}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardFooter className="text-xs text-muted-foreground">
+                Correlation with actual points this season, vs FPL’s own expected points (which equal player form). Higher is better.
+              </CardFooter>
+            </Card>
           </div>
 
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Week by week</CardTitle>
+            <CardHeader>
+              <CardTitle>Week by week</CardTitle>
               <CardDescription>
-                “Suggested” is what the app would have advised for your real squad that week; “realised” compares the points of players bought vs sold over the following weeks.
+                “Suggested” is what the app would have advised for your real squad before each deadline; “realised” compares the points of players bought vs sold over the following weeks.
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>GW</TableHead>
+                    <TableHead>Gameweek</TableHead>
                     <TableHead className="text-right">You</TableHead>
                     <TableHead className="text-right">Following app</TableHead>
                     <TableHead>Your moves</TableHead>
@@ -130,28 +148,37 @@ export function TrackRecord() {
                     const name = (id: number) => data.players[id]?.name ?? `#${id}`;
                     const audited = w.chip !== 'freehit' && w.chip !== 'wildcard';
                     return (
-                      <TableRow key={w.gw} className="align-top text-xs">
-                        <TableCell className="font-semibold">
-                          GW{w.gw}
-                          {w.chip && <Badge variant="outline" className="ml-1 text-[10px]">{w.chip}</Badge>}
-                          <div className="font-normal text-muted-foreground">{w.freeTransfers} FT</div>
+                      <TableRow key={w.gw} className="align-top">
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 font-medium">
+                            GW{w.gw}
+                            {w.chip && <Badge variant="outline">{w.chip}</Badge>}
+                          </div>
+                          {w.deadline && <div className="text-xs text-muted-foreground">before {formatDeadline(w.deadline)}</div>}
+                          <div className="text-xs text-muted-foreground">
+                            results to GW{w.resultsThroughGw} · {w.freeTransfers} FT
+                          </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{w.you.points}</TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {w.follow.points} <span className="text-muted-foreground">(<Delta value={w.follow.points - w.you.points} />)</span>
+                          {w.follow.points}
+                          <div className="text-xs"><Delta value={w.follow.points - w.you.points} /></div>
                         </TableCell>
-                        <TableCell><Moves moves={w.you.transfers} players={data.players} />{w.you.hits > 0 && <Badge variant="destructive" className="mt-1 text-[10px]">−{w.you.hits * 4}</Badge>}</TableCell>
+                        <TableCell>
+                          <Moves moves={w.you.transfers} players={data.players} />
+                          {w.you.hits > 0 && <Badge variant="destructive" className="mt-1">−{w.you.hits * 4}</Badge>}
+                        </TableCell>
                         <TableCell title={w.app.reason}>
                           {audited ? <Moves moves={w.app.transfers} players={data.players} /> : <span className="text-muted-foreground">Chip week</span>}
-                          {w.app.hits > 0 && <Badge variant="destructive" className="mt-1 text-[10px]">−{w.app.hits * 4}</Badge>}
+                          {w.app.hits > 0 && <Badge variant="destructive" className="mt-1">−{w.app.hits * 4}</Badge>}
                         </TableCell>
                         <TableCell className="text-right">
                           {audited ? <><Delta value={w.app.movesRealised} /> / <Delta value={w.you.movesRealised} /></> : '—'}
-                          <div className="text-[10px] text-muted-foreground">over {w.windowGws} GW{w.windowGws === 1 ? '' : 's'}</div>
+                          <div className="text-xs text-muted-foreground">over {w.windowGws} GW{w.windowGws === 1 ? '' : 's'}</div>
                         </TableCell>
                         <TableCell>
                           {name(w.you.captain)} ({w.you.captainPoints}) / {name(w.app.captain)} ({w.app.captainPoints})
-                          {w.app.captainDelta !== 0 && <div><Delta value={w.app.captainDelta} /></div>}
+                          {w.app.captainDelta !== 0 && <div className="text-xs"><Delta value={w.app.captainDelta} /></div>}
                         </TableCell>
                       </TableRow>
                     );
@@ -162,29 +189,24 @@ export function TrackRecord() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Are the projections honest?</CardTitle>
+            <CardHeader>
+              <CardTitle>Are the projections honest?</CardTitle>
               <CardDescription>
-                Players grouped by their projected points for the next gameweek (x-axis), against what they actually scored ({data.accuracy.n.toLocaleString()} player-weeks this season). Average error {data.accuracy.modelMae.toFixed(2)} pts vs {data.accuracy.formMae.toFixed(2)} for FPL’s own figure.
+                Players grouped by projected points for the next gameweek, against what they actually scored ({data.accuracy.n.toLocaleString()} player-weeks this season). Average error {data.accuracy.modelMae.toFixed(2)} pts vs {data.accuracy.formMae.toFixed(2)} for FPL’s own figure.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-64 w-full">
-                <ResponsiveContainer>
-                  <BarChart data={data.accuracy.buckets} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                    <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} />
-                    <ChartTooltip
-                      contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
-                      formatter={(value: number, key: string) => [value.toFixed(2), key === 'projected' ? 'Projected' : 'Actual']}
-                    />
-                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} formatter={(key: string) => (key === 'projected' ? 'Projected' : 'Actual average')} />
-                    <Bar dataKey="projected" fill="var(--muted-foreground)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                    <Bar dataKey="actual" fill="var(--primary)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={chartConfig} className="h-64 w-full">
+                <BarChart accessibilityLayer data={data.accuracy.buckets}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                  <YAxis tickLine={false} axisLine={false} width={28} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="projected" fill="var(--color-projected)" radius={4} />
+                  <Bar dataKey="actual" fill="var(--color-actual)" radius={4} />
+                </BarChart>
+              </ChartContainer>
             </CardContent>
           </Card>
 

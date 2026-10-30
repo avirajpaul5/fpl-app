@@ -135,6 +135,8 @@ export interface XI {
 export interface RecommendBundle {
   gw: number;
   deadline: string | null;
+  /** Latest gameweek whose results the advice uses (all finished before the deadline). */
+  resultsThroughGw: number;
   deadlineDraft: DeadlineDraft;
   xi: XI;
   captain: CaptainPick;
@@ -153,6 +155,7 @@ export interface DeadlineDraft {
 export interface TeamResponse {
   gw: number;
   deadline: string | null;
+  resultsThroughGw: number;
   teamId: number;
   manager: { name: string; teamName: string | null; overallRank: number; overallPoints: number };
   squad: Player[];
@@ -173,6 +176,9 @@ export interface TrackMove { out: number; in: number }
 
 export interface TrackWeek {
   gw: number;
+  /** The advice for this week only used results finished before this deadline. */
+  deadline: string | null;
+  resultsThroughGw: number;
   chip: string | null;
   freeTransfers: number;
   you: { points: number; transfers: TrackMove[]; hits: number; captain: number; captainPoints: number; movesRealised: number };

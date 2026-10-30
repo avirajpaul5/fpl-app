@@ -43,7 +43,7 @@ export function TeamIdInput() {
         )}
       </form>
       {teamId && (
-        <p className="pl-14 text-[10px] text-muted-foreground">Saved in this browser for future sessions.</p>
+        <p className="pl-14 text-xs text-muted-foreground">Saved in this browser for future sessions.</p>
       )}
     </div>
   );

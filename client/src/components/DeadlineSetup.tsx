@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select.tsx';
-import { PosBadge } from '@/components/PosBadge.tsx';
+import { Badge } from '@/components/ui/badge.tsx';
 
 const CHIP_LABELS: Record<ChipKey, string> = {
   wildcard: 'Wildcard',
@@ -89,13 +89,11 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Squad &amp; settings
-            </CardTitle>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          <div className="space-y-1">
+            <CardTitle>Squad &amp; settings</CardTitle>
+            <p className="max-w-2xl text-sm text-muted-foreground">
               Detected from your FPL history: last published squad, bank, {team.freeTransfers} free transfer{team.freeTransfers === 1 ? '' : 's'} and chips. If you've already made moves for GW{team.gw}, mirror them here — the plan above updates instantly.
             </p>
           </div>
@@ -184,9 +182,9 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
               Replacements are limited to legal, affordable players in the same position. Changes stay in this browser only.
             </p>
             {selectedOut && (
-              <Card size="sm" className="mb-3 flex-row flex-wrap items-center gap-2 bg-primary/5 p-3 ring-primary/30">
+              <Card size="sm" className="mb-3 flex-row flex-wrap items-center gap-2 px-3">
                 <span className="text-xs text-muted-foreground">Replace</span>
-                <PosBadge pos={selectedOut.pos} />
+                <Badge variant="secondary">{selectedOut.pos}</Badge>
                 <span className="text-sm font-semibold">{selectedOut.name}</span>
                 <span className="text-xs text-muted-foreground">with</span>
                 <Select
@@ -212,15 +210,14 @@ export function DeadlineSetup({ team, allPlayers }: DeadlineSetupProps) {
             <div className="grid gap-2 md:grid-cols-2">
               {draftPlayers.map((player) => (
                 <Card key={player.id} size="sm" className="flex-row items-center gap-2 px-3 py-2">
-                  <PosBadge pos={player.pos} />
+                  <Badge variant="secondary">{player.pos}</Badge>
                   <span className="min-w-24 flex-1 truncate text-sm font-medium">{player.name}</span>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     sell £{(sellingPrices[player.id] ?? player.price).toFixed(1)}m
                   </span>
                   <Button
                     variant={selectedOutId === player.id ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
+                    size="xs"
                     onClick={() => setSelectedOutId(player.id)}
                   >
                     Replace

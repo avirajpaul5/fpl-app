@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RawBootstrap, RawElement, RawEntry, RawTransfer } from './fplClient.js';
-import { priceAt, scoringRules, startPrice, type SeasonData } from './seasonData.js';
+import { priceAt, resultsKnownBefore, scoringRules, startPrice, type SeasonData } from './seasonData.js';
 import { reconstructPurchasePrices } from './managerState.js';
 
 const element = (id: number, now: number, change: number): RawElement => ({
@@ -42,5 +42,26 @@ describe('reconstructPurchasePrices', () => {
     expect(prices[2]).toBeUndefined();
     expect(prices[1]).toBeUndefined();
     expect(prices[3]).toBe(7.1);
+  });
+});
+
+describe('resultsKnownBefore', () => {
+  const data = {
+    finishedGws: [6, 7, 8],
+    deadlines: { 9: '2026-10-31T11:00:00Z' },
+    lastKickoff: new Map([
+      [6, Date.parse('2026-10-12T19:00:00Z')],
+      [7, Date.parse('2026-10-19T19:00:00Z')],
+      // A GW8 match rescheduled to kick off after the GW9 deadline.
+      [8, Date.parse('2026-10-31T12:30:00Z')],
+    ]),
+  } as unknown as SeasonData;
+
+  it('only uses gameweeks that were completely over before the deadline', () => {
+    expect(resultsKnownBefore(data, 9)).toEqual([6, 7]);
+  });
+
+  it('never uses the gameweek being planned or later ones', () => {
+    expect(resultsKnownBefore({ ...data, deadlines: { 7: '2026-10-17T10:00:00Z' } } as SeasonData, 7)).toEqual([6]);
   });
 });

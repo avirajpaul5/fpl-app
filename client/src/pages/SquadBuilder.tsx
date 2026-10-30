@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label.tsx';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table.tsx';
-import { StatusDot } from '@/components/StatusDot.tsx';
-import { PosBadge } from '@/components/PosBadge.tsx';
+import { Badge } from '@/components/ui/badge.tsx';
+import { availability, fdrVariant } from '@/lib/format.ts';
 import { useAppStore } from '@/store/index.ts';
 import { SquadBuilderSkeleton } from '@/components/LoadingSkeletons.tsx';
 
@@ -36,7 +36,7 @@ function SquadSection({ pos, players }: { pos: Pos; players: Player[] }) {
   return (
     <div>
       <div className="flex items-center gap-2 px-1 mb-2">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <span className="text-sm font-medium">
           {POS_LABEL[pos]}
         </span>
         <span className="text-xs text-muted-foreground">({players.length})</span>
@@ -58,29 +58,29 @@ function SquadSection({ pos, players }: { pos: Pos; players: Player[] }) {
               <TableRow key={p.id}>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <PosBadge pos={p.pos} />
+                    <Badge variant="secondary">{p.pos}</Badge>
                     <span className="font-medium text-sm">{p.name}</span>
-                    <StatusDot status={p.status} chanceNext={p.chanceNext} />
+                    {availability(p) && <Badge variant={availability(p)!.variant}>{availability(p)!.label}</Badge>}
                   </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                   {p.teamName}
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  <div className="flex gap-0.5">
+                  <div className="flex gap-1">
                     {p.upcoming.slice(0, 5).map((f, k) => (
-                      <div
+                      <Badge
                         key={k}
-                        title={`GW${f.gw} FDR${f.fdr}${f.isDGW ? ' DGW' : ''}${f.isHome ? ' H' : ' A'}`}
-                        className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center fdr-${f.fdr}`}
+                        variant={fdrVariant(f.fdr)}
+                        title={`GW${f.gw} · difficulty ${f.fdr}${f.isDGW ? ' · double' : ''} · ${f.isHome ? 'home' : 'away'}`}
                       >
                         {f.fdr}
-                      </div>
+                      </Badge>
                     ))}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <span className="text-primary font-semibold text-sm tabular-nums">
+                  <span className="font-semibold text-sm tabular-nums">
                     {(p.projHorizon ?? 0).toFixed(1)}
                   </span>
                 </TableCell>
@@ -123,8 +123,8 @@ export function SquadBuilder() {
 
       {/* Controls */}
       <Card>
-        <CardContent className="pt-5 pb-5">
-          <div className="flex flex-wrap items-center gap-6">
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="squad-budget" className="text-xs text-muted-foreground">Budget (£m)</Label>
               <Input
@@ -133,14 +133,13 @@ export function SquadBuilder() {
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
                 min={50} max={110} step={0.5}
-                className="w-28 h-9 text-sm"
+                className="w-28"
               />
             </div>
             <Button
               variant="outline"
               onClick={() => optimize.mutate()}
               disabled={optimize.isPending}
-              className="h-9 mt-5"
             >
               {optimize.isPending ? 'Optimising…' : 'Build Optimal Squad'}
             </Button>
@@ -156,7 +155,7 @@ export function SquadBuilder() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Bank</p>
-                  <p className="font-semibold tabular-nums text-sm text-primary">£{optimize.data?.bank.toFixed(1)}m</p>
+                  <p className="font-semibold tabular-nums text-sm">£{optimize.data?.bank.toFixed(1)}m</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">5-GW xP</p>

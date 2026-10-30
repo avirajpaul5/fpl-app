@@ -37,6 +37,25 @@ export interface SeasonData {
   /** Per-player stats for every finished GW, keyed by element id. */
   history: Map<number, GwStat[]>;
   elements: Map<number, RawElement>;
+  /** Latest kickoff of each GW's fixtures (ms). */
+  lastKickoff: Map<number, number>;
+}
+
+/** Time allowed after a kickoff before a match's stats count as known. */
+const MATCH_DURATION_MS = 2.5 * 60 * 60 * 1000;
+
+/**
+ * Finished gameweeks whose every match was over before the `gw` deadline —
+ * the only results a recommendation for `gw` may use.
+ */
+export function resultsKnownBefore(data: SeasonData, gw: number): number[] {
+  const deadline = Date.parse(data.deadlines[gw] ?? '');
+  return data.finishedGws.filter((h) => {
+    if (h >= gw) return false;
+    if (!Number.isFinite(deadline)) return true;
+    const last = data.lastKickoff.get(h);
+    return last == null || last + MATCH_DURATION_MS <= deadline;
+  });
 }
 
 export async function loadSeasonData(): Promise<SeasonData> {
@@ -75,7 +94,13 @@ export async function loadSeasonData(): Promise<SeasonData> {
   }
   const deadlines = Object.fromEntries(bootstrap.events.map((e) => [e.id, e.deadline_time]));
   const elements = new Map(bootstrap.elements.map((e) => [e.id, e]));
-  return { bootstrap, fixtures, nextGw, finishedGws, deadlines, history, elements };
+  const lastKickoff = new Map<number, number>();
+  for (const f of fixtures) {
+    const t = f.kickoff_time ? Date.parse(f.kickoff_time) : NaN;
+    if (f.event == null || !Number.isFinite(t)) continue;
+    lastKickoff.set(f.event, Math.max(lastKickoff.get(f.event) ?? 0, t));
+  }
+  return { bootstrap, fixtures, nextGw, finishedGws, deadlines, history, elements, lastKickoff };
 }
 
 /** This season's scoring rules from the bootstrap, falling back to the defaults. */
@@ -135,6 +160,7 @@ export function modelPlayers(
   beforeGw: number,
   opts: { withStatus: boolean; price?: (el: RawElement) => number }
 ): ModelPlayer[] {
+  const known = new Set(resultsKnownBefore(data, beforeGw));
   const out: ModelPlayer[] = [];
   for (const el of data.bootstrap.elements) {
     const pos = normalizePos(el.element_type);
@@ -144,7 +170,7 @@ export function modelPlayers(
       pos,
       team: el.team,
       price: opts.price ? opts.price(el) : el.now_cost / 10,
-      history: (data.history.get(el.id) ?? []).filter((s) => s.gw < beforeGw),
+      history: (data.history.get(el.id) ?? []).filter((s) => known.has(s.gw)),
       prior: seasonPrior(el.code),
       ...(opts.withStatus ? { status: el.status, chanceNext: el.chance_of_playing_next_round, news: el.news } : {}),
     });
@@ -153,11 +179,12 @@ export function modelPlayers(
 }
 
 /** Projections for the upcoming deadline, using live injury/availability news. */
-export async function getProjectedPlayers(): Promise<{ gw: number; players: ProjectedPlayer[]; data: SeasonData }> {
+export async function getProjectedPlayers(): Promise<{ gw: number; players: ProjectedPlayer[]; data: SeasonData; resultsThroughGw: number }> {
   const data = await loadSeasonData();
+  const resultsThroughGw = Math.max(0, ...resultsKnownBefore(data, data.nextGw));
   const key = `projected:${data.nextGw}:${data.finishedGws.length}`;
   const hit = cacheGet<ProjectedPlayer[]>(key);
-  if (hit) return { gw: data.nextGw, players: hit, data };
+  if (hit) return { gw: data.nextGw, players: hit, data, resultsThroughGw };
   const display = await fetchNormalizedPlayers(data.nextGw);
   const projections = projectAll({
     players: modelPlayers(data, data.nextGw, { withStatus: true }),
@@ -169,7 +196,7 @@ export async function getProjectedPlayers(): Promise<{ gw: number; players: Proj
   });
   const players = attachProjections(display, projections, PROJECTION_HORIZON);
   cacheSet(key, players, 15 * 60 * 1000);
-  return { gw: data.nextGw, players, data };
+  return { gw: data.nextGw, players, data, resultsThroughGw };
 }
 
 /**

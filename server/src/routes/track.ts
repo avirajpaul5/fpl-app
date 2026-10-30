@@ -16,7 +16,7 @@ import {
 } from '@fpl/engine';
 import { cacheGet, cacheSet } from '../cache.js';
 import { fetchEntryEvent, fetchNormalizedPlayers, type RawEntryEvent } from '../fplClient.js';
-import { loadSeasonData, priceAt, projectAtDeadline, type SeasonData } from '../seasonData.js';
+import { loadSeasonData, priceAt, projectAtDeadline, resultsKnownBefore, type SeasonData } from '../seasonData.js';
 import { loadManagerState, reconstructPurchasePrices } from '../managerState.js';
 
 const router = Router();
@@ -161,6 +161,9 @@ router.get('/:teamId', async (req: Request, res: Response) => {
 
       return {
         gw,
+        // The advice for this week only saw results finished before its deadline.
+        deadline: data.deadlines[gw] ?? null,
+        resultsThroughGw: Math.max(0, ...resultsKnownBefore(data, gw)),
         chip,
         freeTransfers: ft,
         you: {
@@ -252,8 +255,8 @@ router.get('/:teamId', async (req: Request, res: Response) => {
       },
       players,
       notes: [
-        'Each week uses only results available before that deadline.',
-        'Injury news and exact historical prices are not archived by FPL, so the replay ignores flags and interpolates prices.',
+        'Each week’s advice is rebuilt from scratch using only matches that had finished before that week’s deadline — never later results.',
+        'FPL does not archive injury news or price history, so the replay ignores injury flags and estimates past prices between each player’s start-of-season and current price.',
         'Chips are replayed in the weeks you played them; Free Hit weeks keep your real score.',
       ],
     };

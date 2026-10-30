@@ -12,7 +12,7 @@ router.get('/:teamId', async (req: Request, res: Response) => {
       return;
     }
 
-    const { gw, players, data } = await getProjectedPlayers();
+    const { gw, players, data, resultsThroughGw } = await getProjectedPlayers();
     const state = await loadManagerState(teamId, data);
     const playerMap = new Map(players.map((p) => [p.id, p]));
     const captain = state.picks.find((p) => p.is_captain);
@@ -21,6 +21,7 @@ router.get('/:teamId', async (req: Request, res: Response) => {
     res.json({
       gw,
       deadline: data.deadlines[gw] ?? null,
+      resultsThroughGw,
       teamId,
       manager: {
         name: `${state.entry.player_first_name} ${state.entry.player_last_name}`,

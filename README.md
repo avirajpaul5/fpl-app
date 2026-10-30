@@ -17,6 +17,8 @@ A Fantasy Premier League planning app that turns live FPL data into a weekly pla
 
 **Transfers** (`engine/src/transfers.ts`, `squad.ts`) value a squad the way FPL scores it — the best legal XI each week, the captain counted twice, the bench lightly — over the next five gameweeks. The planner finds the best plan for each number of transfers (including paired moves where one sale funds an upgrade) and picks between rolling, using free transfers or taking hits by weighing the projected gain against the value of a saved transfer and the hit cost. Gains are discounted because the top-rated move is usually optimistic, and more so in the first weeks of a season.
 
+**Timing.** A recommendation for a gameweek only ever uses matches that had finished before that gameweek's deadline. The upcoming gameweek is chosen by deadline time (not FPL's `is_next` flag, which can lag), cached FPL data expires at the deadline, and the app drops a plan whose deadline passes while it is open. The track record rebuilds every past week under the same cutoff and shows the deadline each piece of advice was made before.
+
 ## How accurate is it?
 
 All numbers are out-of-sample: every gameweek is projected using only data available before its deadline (`engine/backtest`).
@@ -49,7 +51,7 @@ Last season's per-player totals used as the early-season prior live in `server/s
 
 This repository is an npm workspace with three packages:
 
-- `client` — React, Vite, Tailwind CSS, React Query, and Zustand frontend
+- `client` — React 19, Vite, Tailwind CSS, React Query and Zustand, with stock [shadcn/ui](https://ui.shadcn.com) components (`base-nova` style, neutral black-and-white theme). Add components with `npx shadcn@latest add <name>` from `client/` rather than hand-building them
 - `server` — Express API that fetches and normalizes public FPL data
 - `engine` — TypeScript projection and optimization logic with Vitest tests
 
