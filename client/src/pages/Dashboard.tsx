@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Clock, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/store/index.ts';
 import { fetchDeadlineRecommend, fetchPlayers, fetchTeam, fetchTrack, type TransferMove } from '@/api/index.ts';
-import { Button } from '@/components/ui/button.tsx';
+import { Button, buttonVariants } from '@/components/ui/button.tsx';
 import {
   Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card.tsx';
@@ -192,10 +192,10 @@ export function Dashboard() {
               Its suggested transfers outscored the players they replaced by {signed(summary.appMovesRealised, 0)} pts, vs {signed(summary.yourMovesRealised, 0)} for your own moves.
             </CardDescription>
             <CardAction>
-              <Button variant="outline" size="sm" render={<Link to="/track" />} nativeButton={false}>
+              <Link to="/track" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                 Details
                 <ArrowRight data-icon="inline-end" />
-              </Button>
+              </Link>
             </CardAction>
           </CardHeader>
         </Card>

@@ -1,7 +1,7 @@
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, ExternalLink } from 'lucide-react';
 import type { TransferMove, TransferPlan } from '@/api/index.ts';
 import { Badge } from '@/components/ui/badge.tsx';
-import { Button } from '@/components/ui/button.tsx';
+import { Button, buttonVariants } from '@/components/ui/button.tsx';
 import {
   Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card.tsx';
@@ -88,8 +88,17 @@ export function PlanCard({ gw, plan, allowHits, onAllowHitsChange, onApply }: Pr
                 <Check data-icon="inline-start" />
                 Apply to my draft
               </Button>
+              <a
+                href="https://fantasy.premierleague.com/transfers"
+                target="_blank"
+                rel="noreferrer"
+                className={buttonVariants({ variant: 'outline' })}
+              >
+                Open FPL transfers
+                <ExternalLink data-icon="inline-end" />
+              </a>
               <span className="text-xs text-muted-foreground">
-                Updates the squad, bank and free transfers below. Make the same moves on the FPL site.
+                FPL only accepts transfers made on its own site, so confirm these moves there before the deadline.
               </span>
             </div>
           </div>
