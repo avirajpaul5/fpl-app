@@ -154,6 +154,24 @@ describe('GET /api/players', () => {
     expect(player.projHorizon).toBeCloseTo(player.projByGw.slice(0, 5).reduce((s, v) => s + v, 0), 5);
   });
 
+  it('sorts by next-GW projection, highest first by default', async () => {
+    const json = vi.fn();
+    const status = vi.fn().mockReturnValue({ json });
+    // An injured player (no chance given) projects zero next week.
+    bootstrap.elements.push({ ...bootstrap.elements[0]!, id: 102, web_name: 'Injured Player', status: 'i' });
+    try {
+      await getPlayers({ query: {} } as Request, { json, status } as unknown as Response);
+      const body = json.mock.calls[0]![0] as { players: Array<{ id: number }> };
+      expect(body.players.map((p) => p.id)).toEqual([101, 102]);
+      json.mockClear();
+      cacheInvalidatePattern('');
+      await getPlayers({ query: { dir: 'asc' } } as unknown as Request, { json, status } as unknown as Response);
+      expect((json.mock.calls[0]![0] as { players: Array<{ id: number }> }).players.map((p) => p.id)).toEqual([102, 101]);
+    } finally {
+      bootstrap.elements.pop();
+    }
+  });
+
   it('normalizes public expected-goals and expected-assists data', async () => {
     const player = (await callPlayersRoute()).players[0]!;
 

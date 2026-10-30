@@ -28,7 +28,8 @@ export async function getPlayers(req: Request, res: Response): Promise<void> {
     }
 
     const sort = (req.query['sort'] as string) ?? 'projNext';
-    const dir = (req.query['dir'] as string) === 'asc' ? 1 : -1;
+    // Comparators below return descending order; flip it only when asked for ascending.
+    const dir = (req.query['dir'] as string) === 'asc' ? -1 : 1;
     const next = (p: (typeof result)[number]) => p.projByGw[0] ?? 0;
 
     result = [...result].sort((a, b) => {
