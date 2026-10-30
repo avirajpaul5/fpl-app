@@ -15,6 +15,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { TeamIdInput } from '@/components/TeamIdInput.tsx';
 import { DeadlineSetup } from '@/components/DeadlineSetup.tsx';
 import { PlanCard } from '@/components/PlanCard.tsx';
+import { Reveal } from '@/components/reveal.tsx';
 import { XpBreakdown } from '@/components/XpBreakdown.tsx';
 import { DeadlineSetupSkeleton, RecommendationSkeleton } from '@/components/LoadingSkeletons.tsx';
 import { availability, confidenceVariant, formatDeadline, signed, timeUntil } from '@/lib/format.ts';
@@ -116,7 +117,7 @@ export function Dashboard() {
 
   if (!teamId) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-20">
+      <Reveal className="mx-auto max-w-6xl px-4 py-20">
         <Card className="mx-auto max-w-lg">
           <CardHeader>
             <CardTitle className="text-2xl">Your weekly FPL plan</CardTitle>
@@ -131,7 +132,7 @@ export function Dashboard() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </Reveal>
     );
   }
 
@@ -180,6 +181,7 @@ export function Dashboard() {
       )}
 
       {summary && track.data && (
+        <Reveal>
         <Card size="sm">
           <CardHeader>
             <CardDescription>Track record · GW{track.data.fromGw}–{track.data.toGw}</CardDescription>
@@ -197,6 +199,7 @@ export function Dashboard() {
             </CardAction>
           </CardHeader>
         </Card>
+        </Reveal>
       )}
 
       {(team.isLoading || players.isLoading || recommend.isLoading || (team.data && !draftReady)) && <RecommendationSkeleton />}
@@ -206,14 +209,17 @@ export function Dashboard() {
 
       {data && (
         <>
-          <PlanCard
-            gw={data.gw}
-            plan={data.transfers}
-            allowHits={allowHits}
-            onAllowHitsChange={setAllowHits}
-            onApply={handleApply}
-          />
+          <Reveal delay={0.05}>
+            <PlanCard
+              gw={data.gw}
+              plan={data.transfers}
+              allowHits={allowHits}
+              onAllowHitsChange={setAllowHits}
+              onApply={handleApply}
+            />
+          </Reveal>
 
+          <Reveal delay={0.1}>
           <Card>
             <CardHeader>
               <CardTitle>Captain</CardTitle>
@@ -223,7 +229,8 @@ export function Dashboard() {
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-3">
               {data.captain.topThree.map((item, i) => (
-                <Card key={item.player.id} size="sm">
+                <Reveal key={item.player.id} delay={0.15 + i * 0.05}>
+                <Card size="sm" className="h-full">
                   <CardHeader>
                     <CardDescription className="flex items-center gap-1.5">
                       {i === 0 && <Badge>Captain</Badge>}
@@ -239,10 +246,13 @@ export function Dashboard() {
                     <Progress value={Math.min(100, (item.projXp / 10) * 100)} aria-label="Expected points" />
                   </CardContent>
                 </Card>
+                </Reveal>
               ))}
             </CardContent>
           </Card>
+          </Reveal>
 
+          <Reveal>
           <Card>
             <CardHeader>
               <CardTitle>Starting XI</CardTitle>
@@ -301,20 +311,23 @@ export function Dashboard() {
               </Table>
             </CardContent>
           </Card>
+          </Reveal>
 
+          <Reveal>
           <Card>
             <CardHeader>
               <CardTitle>Chips</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {CHIPS.map(({ key, label }) => {
+              {CHIPS.map(({ key, label }, index) => {
                 const chip = data.chips[key];
                 const unavailable = chip.reason.startsWith('Not available');
                 const status = unavailable
                   ? (data.gw < 20 ? 'Used — back at GW20' : 'Used this season')
                   : chip.recommend ? `Play this week (GW${chip.gw})` : chip.gw ? `Hold · best window GW${chip.gw}` : 'Hold';
                 return (
-                  <Card key={key} size="sm" className={unavailable ? 'opacity-60' : undefined}>
+                  <Reveal key={key} delay={index * 0.05}>
+                  <Card size="sm" className={unavailable ? 'h-full opacity-60' : 'h-full'}>
                     <CardHeader>
                       <CardTitle>{label}</CardTitle>
                       <CardDescription>{status}</CardDescription>
@@ -324,14 +337,20 @@ export function Dashboard() {
                     </CardHeader>
                     <CardContent className="text-xs text-muted-foreground">{chip.reason}</CardContent>
                   </Card>
+                  </Reveal>
                 );
               })}
             </CardContent>
           </Card>
+          </Reveal>
         </>
       )}
 
-      {team.data && players.data && <DeadlineSetup team={team.data} allPlayers={players.data.players} />}
+      {team.data && players.data && (
+        <Reveal>
+          <DeadlineSetup team={team.data} allPlayers={players.data.players} />
+        </Reveal>
+      )}
       {(team.isLoading || players.isLoading) && <DeadlineSetupSkeleton />}
     </div>
   );

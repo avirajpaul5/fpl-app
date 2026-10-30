@@ -21,6 +21,7 @@ import {
 import { availability } from '@/lib/format.ts';
 import { PlayerTableSkeleton } from '@/components/LoadingSkeletons.tsx';
 import { XpBreakdown } from '@/components/XpBreakdown.tsx';
+import { Reveal } from '@/components/reveal.tsx';
 
 type SortKey = 'epNext' | 'projHorizon' | 'price' | 'ownership' | 'ppg' | 'totalPoints';
 type SortDir = 'asc' | 'desc';
@@ -140,6 +141,7 @@ export function Transfers() {
 
       {/* Compare tray */}
       {(outP || inP) && (
+        <Reveal>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -226,9 +228,11 @@ export function Transfers() {
             )}
           </CardContent>
         </Card>
+        </Reveal>
       )}
 
       {/* Filters */}
+      <Reveal>
       <Card size="sm" className="flex-row flex-wrap items-center gap-2 p-3">
         <div className="flex gap-1">
           {(['ALL','GK','DEF','MID','FWD'] as PosFilter[]).map((p) => (
@@ -281,12 +285,14 @@ export function Transfers() {
           {sortDir === 'desc' ? '↓ Desc' : '↑ Asc'}
         </Button>
       </Card>
+      </Reveal>
 
       {isLoading && <PlayerTableSkeleton />}
       {isError && <Alert variant="destructive"><AlertTitle>Could not load players</AlertTitle><AlertDescription>{String(error)}</AlertDescription></Alert>}
 
       {/* Player table */}
       {filtered.length > 0 && (
+        <Reveal delay={0.05}>
         <Card>
           <Table>
             <TableHeader>
@@ -374,6 +380,7 @@ export function Transfers() {
             </Pagination>
           </div>
         </Card>
+        </Reveal>
       )}
       {!isLoading && !isError && filtered.length === 0 && (
         <Alert><AlertTitle>No players match</AlertTitle><AlertDescription>Try clearing a filter or increasing the maximum price.</AlertDescription></Alert>

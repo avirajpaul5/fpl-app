@@ -281,6 +281,17 @@ export function fetchTrack(teamId: number): Promise<TrackResponse> {
   return get(`/track/${teamId}`);
 }
 
+/** Team ID remembered by the server in a long-lived cookie. */
+export function fetchRememberedTeam(): Promise<{ teamId: number | null }> {
+  return get('/me');
+}
+
+export async function rememberTeam(teamId: number | null): Promise<void> {
+  await fetch(`${BASE}/me`, teamId == null
+    ? { method: 'DELETE' }
+    : { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId }) });
+}
+
 export function fetchOptimize(opts: {
   teamId?: number;
   budget?: number;

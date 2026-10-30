@@ -13,10 +13,12 @@ import {
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.tsx';
 import { formatDeadline, signed } from '@/lib/format.ts';
+import { Reveal } from '@/components/reveal.tsx';
 
+// Grayscale chart tokens, darker series on light backgrounds and lighter on dark.
 const chartConfig = {
-  projected: { label: 'Projected', color: 'var(--chart-2)' },
-  actual: { label: 'Actual average', color: 'var(--chart-1)' },
+  projected: { label: 'Projected', theme: { light: 'var(--chart-2)', dark: 'var(--chart-3)' } },
+  actual: { label: 'Actual average', theme: { light: 'var(--chart-5)', dark: 'var(--chart-1)' } },
 } satisfies ChartConfig;
 
 function Moves({ moves, players }: { moves: TrackMove[]; players: TrackResponse['players'] }) {
@@ -79,7 +81,8 @@ export function TrackRecord() {
       {data?.ready && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Reveal delay={0.0}>
+            <Card className="h-full">
               <CardHeader>
                 <CardDescription>Follow the app · GW{data.fromGw}–{data.toGw}</CardDescription>
                 <CardTitle className="text-2xl tabular-nums">
@@ -90,7 +93,9 @@ export function TrackRecord() {
                 <span>Its transfers, lineup and captain each week (your chips kept): <Delta value={data.summary.followDiff} /> vs your actual points.</span>
               </CardFooter>
             </Card>
-            <Card>
+            </Reveal>
+            <Reveal delay={0.05}>
+            <Card className="h-full">
               <CardHeader>
                 <CardDescription>Suggested transfers</CardDescription>
                 <CardTitle className="text-2xl tabular-nums">
@@ -101,7 +106,9 @@ export function TrackRecord() {
                 Points the suggested signings outscored the players they replaced over the next 4 GWs, summed per week — vs your own moves after hits.
               </CardFooter>
             </Card>
-            <Card>
+            </Reveal>
+            <Reveal delay={0.1}>
+            <Card className="h-full">
               <CardHeader>
                 <CardDescription>Captaincy</CardDescription>
                 <CardTitle className="text-2xl"><Delta value={data.summary.captainDelta} /></CardTitle>
@@ -110,7 +117,9 @@ export function TrackRecord() {
                 Points from captaining its pick instead of yours, in your actual lineup, over {data.summary.captainWeeks} weeks.
               </CardFooter>
             </Card>
-            <Card>
+            </Reveal>
+            <Reveal delay={0.15}>
+            <Card className="h-full">
               <CardHeader>
                 <CardDescription>Projection accuracy</CardDescription>
                 <CardTitle className="text-2xl tabular-nums">
@@ -121,8 +130,10 @@ export function TrackRecord() {
                 Correlation with actual points this season, vs FPL’s own expected points (which equal player form). Higher is better.
               </CardFooter>
             </Card>
+            </Reveal>
           </div>
 
+          <Reveal>
           <Card>
             <CardHeader>
               <CardTitle>Week by week</CardTitle>
@@ -187,7 +198,9 @@ export function TrackRecord() {
               </Table>
             </CardContent>
           </Card>
+          </Reveal>
 
+          <Reveal>
           <Card>
             <CardHeader>
               <CardTitle>Are the projections honest?</CardTitle>
@@ -209,6 +222,7 @@ export function TrackRecord() {
               </ChartContainer>
             </CardContent>
           </Card>
+          </Reveal>
 
           <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
             {data.notes.map((note) => <li key={note}>{note}</li>)}

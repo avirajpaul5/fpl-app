@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.tsx';
 import { Badge } from '@/components/ui/badge.tsx';
 import { confidenceVariant } from '@/lib/format.ts';
 import { ChipGridSkeleton } from '@/components/LoadingSkeletons.tsx';
+import { Reveal } from '@/components/reveal.tsx';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip.tsx';
 
 const CHIP_META = {
@@ -91,11 +92,12 @@ export function Chips() {
 
       {data && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(Object.keys(data.chips) as Array<keyof typeof data.chips>).map((key) => {
+            {(Object.keys(data.chips) as Array<keyof typeof data.chips>).map((key, index) => {
               const chip = data.chips[key];
               const meta = CHIP_META[key];
               return (
-                <Card key={key}>
+                <Reveal key={key} delay={index * 0.05}>
+                <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{meta.label}</CardTitle>
                     <CardDescription>{meta.description}</CardDescription>
@@ -140,6 +142,7 @@ export function Chips() {
                     )}
                   </CardContent>
                 </Card>
+                </Reveal>
               );
             })}
           </div>

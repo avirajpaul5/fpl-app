@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge.tsx';
 import { availability, fdrVariant } from '@/lib/format.ts';
 import { useAppStore } from '@/store/index.ts';
 import { SquadBuilderSkeleton } from '@/components/LoadingSkeletons.tsx';
+import { Reveal } from '@/components/reveal.tsx';
 
 type Pos = 'GK' | 'DEF' | 'MID' | 'FWD';
 
@@ -41,6 +42,7 @@ function SquadSection({ pos, players }: { pos: Pos; players: Player[] }) {
         </span>
         <span className="text-xs text-muted-foreground">({players.length})</span>
       </div>
+      <Reveal>
       <Card>
         <Table>
           <TableHeader>
@@ -95,6 +97,7 @@ function SquadSection({ pos, players }: { pos: Pos; players: Player[] }) {
           </TableBody>
         </Table>
       </Card>
+      </Reveal>
     </div>
   );
 }
@@ -122,6 +125,7 @@ export function SquadBuilder() {
       </div>
 
       {/* Controls */}
+      <Reveal>
       <Card>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -170,6 +174,7 @@ export function SquadBuilder() {
           )}
         </CardContent>
       </Card>
+      </Reveal>
 
       <Alert><AlertDescription>This app does <strong>not</strong> write to FPL. Use this squad as a reference and make changes manually.</AlertDescription></Alert>
 

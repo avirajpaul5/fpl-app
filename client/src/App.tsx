@@ -2,14 +2,16 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
-import { Transfers } from './pages/Transfers.tsx';
-import { Chips } from './pages/Chips.tsx';
-import { SquadBuilder } from './pages/SquadBuilder.tsx';
+import { useRememberedTeam } from './hooks/use-remembered-team.ts';
 
-// Charts are only needed on the track record page; keep them out of the main bundle.
+// Only the dashboard loads up front; other pages (and the chart library) load on visit.
 const TrackRecord = lazy(() => import('./pages/TrackRecord.tsx').then((m) => ({ default: m.TrackRecord })));
+const Transfers = lazy(() => import('./pages/Transfers.tsx').then((m) => ({ default: m.Transfers })));
+const Chips = lazy(() => import('./pages/Chips.tsx').then((m) => ({ default: m.Chips })));
+const SquadBuilder = lazy(() => import('./pages/SquadBuilder.tsx').then((m) => ({ default: m.SquadBuilder })));
 
 export default function App() {
+  useRememberedTeam();
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />

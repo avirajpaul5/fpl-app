@@ -10,6 +10,8 @@ A Fantasy Premier League planning app that turns live FPL data into a weekly pla
 - **Track record** — the season replayed week by week: following the app vs your actual points, its suggestions on your real squad vs your own moves, and projection accuracy vs FPL's own expected points
 - Chip timing for Wildcard, Free Hit, Bench Boost and Triple Captain
 - Player explorer and a squad builder with locked and excluded players
+- Light, dark or system theme, with subtle reveal animations (Motion) that respect "reduce motion"
+- Your team ID is remembered across sessions: in the browser, and in a long-lived first-party cookie that survives Safari clearing site data after a week away. Open `/?team=<id>` to load it on any other device
 
 ## How recommendations are made
 
@@ -104,6 +106,7 @@ npm test       # Run the engine and server test suites
 - `GET /api/recommend/:teamId` — transfer plan, lineup, captain and chip advice
 - `POST /api/recommend/:teamId` — the same for an edited deadline draft (`allowHits` optional)
 - `GET /api/track/:teamId` — the season replayed with the engine's advice
+- `GET | PUT | DELETE /api/me` — the team ID remembered for this browser (cookie)
 - `POST /api/optimize` — generate a squad within the supplied constraints
 
 ## Notes

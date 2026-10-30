@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Label } from '@/components/ui/label.tsx';
@@ -7,6 +7,11 @@ import { useAppStore } from '@/store/index.ts';
 export function TeamIdInput() {
   const { teamId, setTeamId } = useAppStore();
   const [value, setValue] = useState(teamId ? String(teamId) : '');
+
+  // The ID can be restored after first render (from a link or the server).
+  useEffect(() => {
+    setValue(teamId ? String(teamId) : '');
+  }, [teamId]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +48,9 @@ export function TeamIdInput() {
         )}
       </form>
       {teamId && (
-        <p className="pl-14 text-xs text-muted-foreground">Saved in this browser for future sessions.</p>
+        <p className="pl-14 text-xs text-muted-foreground">
+          Remembered on this device. Open <span className="font-mono">?team={teamId}</span> on any other.
+        </p>
       )}
     </div>
   );
